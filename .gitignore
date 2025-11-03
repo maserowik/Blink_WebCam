@@ -1,15 +1,34 @@
-.idea/
-*.hex
-*.elf
-*.bin
-*.log
+#############################
+# Python Files & Environments
+#############################
+__pycache__/
 *.pyc
-*.swp
-*.csv
-.DS_Store
-build/
-*.json
-.vs/
+*.pyo
+*.pyd
+.env
 .venv/
-.cameras/
-.logs/
+venv/
+env/
+.idea/
+.vscode/
+
+#############################
+# Blink Camera Data
+#############################
+cameras/**/images/
+cameras/**/logs/
+*.jpg
+*.jpeg
+*.png
+
+#############################
+# OS Files
+#############################
+.DS_Store
+Thumbs.db
+
+#############################
+# Temporary & Backup Files
+#############################
+*.tmp
+*.bak

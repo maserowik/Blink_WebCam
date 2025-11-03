@@ -1,0 +1,48 @@
+﻿import asyncio
+from aiohttp import ClientSession
+from blinkpy.blinkpy import Blink
+from blinkpy.auth import Auth, BlinkTwoFARequiredError
+
+
+async def start():
+    """Setup Blink authentication and save credentials"""
+    # Create a session
+    session = ClientSession()
+
+    # Initialize Blink with the session
+    blink = Blink(session=session)
+
+    try:
+        # Start will prompt for username and password
+        await blink.start()
+    except BlinkTwoFARequiredError:
+        # If 2FA is required, prompt for it
+        await blink.prompt_2fa()
+
+    # Save the credentials
+    token_file = "blink_token.json"
+    await blink.save(token_file)
+
+    print(f"\n✓ Credentials saved to {token_file}")
+    print(f"✓ Setup complete!")
+
+    # Display available cameras
+    if blink.cameras:
+        print(f"\n✓ Found {len(blink.cameras)} camera(s):")
+        for name in blink.cameras.keys():
+            print(f"  - {name}")
+    else:
+        print("\n⚠ No cameras found on your account")
+
+    # Close the session
+    await session.close()
+
+    return blink
+
+
+if __name__ == "__main__":
+    try:
+        blink = asyncio.run(start())
+        print("\n✓ Authentication successful!")
+    except Exception as e:
+        print(f"\n✗ Error: {type(e).__name__}: {e}")

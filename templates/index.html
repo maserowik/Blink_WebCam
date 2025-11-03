@@ -25,26 +25,67 @@
         }
 
         .header h1 {
-            font-size: 2.5em;
+            font-size: clamp(1.5em, 4vw, 2.5em);
             margin-bottom: 10px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
 
         .header p {
-            font-size: 1.1em;
+            font-size: clamp(0.9em, 2vw, 1.1em);
             opacity: 0.9;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1800px;
             margin: 0 auto;
         }
 
         .camera-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
             gap: 20px;
             margin-bottom: 20px;
+        }
+
+        /* Auto-adjust grid based on screen size and aspect ratio */
+        @media (min-aspect-ratio: 16/9) and (min-width: 1600px) {
+            .camera-grid {
+                grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            }
+        }
+
+        @media (min-width: 1200px) and (max-width: 1599px) {
+            .camera-grid {
+                grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            }
+        }
+
+        @media (min-width: 768px) and (max-width: 1199px) {
+            .camera-grid {
+                grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            }
+        }
+
+        @media (max-width: 767px) {
+            .camera-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Portrait mode optimization */
+        @media (orientation: portrait) and (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .camera-grid {
+                gap: 15px;
+            }
+        }
+
+        /* Ultra-wide screens */
+        @media (min-aspect-ratio: 21/9) {
+            .camera-grid {
+                grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            }
         }
 
         .camera-card {
@@ -54,6 +95,7 @@
             box-shadow: 0 10px 30px rgba(0,0,0,0.3);
             transition: transform 0.3s ease;
             position: relative;
+            height: fit-content;
         }
 
         .camera-card:hover {
@@ -63,7 +105,7 @@
         .camera-image-container {
             position: relative;
             width: 100%;
-            padding-bottom: 75%;
+            padding-bottom: 75%; /* 4:3 aspect ratio for camera feed */
             background: #000;
             overflow: hidden;
         }
@@ -85,10 +127,11 @@
             padding: 15px;
             background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 100%);
             color: white;
+            z-index: 10;
         }
 
         .camera-name {
-            font-size: 1.5em;
+            font-size: clamp(1.1em, 2.5vw, 1.5em);
             font-weight: bold;
             margin-bottom: 10px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
@@ -96,7 +139,7 @@
 
         .camera-stats {
             display: flex;
-            gap: 15px;
+            gap: 10px;
             flex-wrap: wrap;
         }
 
@@ -104,7 +147,7 @@
             display: flex;
             align-items: center;
             gap: 5px;
-            font-size: 0.95em;
+            font-size: clamp(0.8em, 1.5vw, 0.95em);
             background: rgba(0,0,0,0.5);
             padding: 5px 10px;
             border-radius: 5px;
@@ -123,7 +166,7 @@
 
         .timestamp {
             color: #6c757d;
-            font-size: 0.9em;
+            font-size: clamp(0.75em, 1.5vw, 0.9em);
         }
 
         .no-cameras {
@@ -180,17 +223,33 @@
             color: white;
         }
 
-        @media (max-width: 1024px) {
-            .camera-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
         .refresh-info {
             text-align: center;
             color: white;
             margin-top: 20px;
             opacity: 0.8;
+            font-size: clamp(0.8em, 1.5vw, 1em);
+        }
+
+        /* Fullscreen mode support */
+        @media (display-mode: fullscreen) {
+            body {
+                padding: 10px;
+            }
+            .header {
+                margin-bottom: 15px;
+            }
+        }
+
+        /* Small phones */
+        @media (max-width: 375px) {
+            .stat {
+                font-size: 0.75em;
+                padding: 4px 8px;
+            }
+            .camera-overlay {
+                padding: 10px;
+            }
         }
     </style>
 </head>

@@ -64,7 +64,7 @@ def get_camera_data():
 
             if log_file.exists():
                 try:
-                    with open(log_file, "r") as f:
+                    with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
                         lines = f.readlines()
                         if lines:
                             last_line = lines[-1]
@@ -73,12 +73,30 @@ def get_camera_data():
                                 timestamp = parts[0]
                                 for part in parts:
                                     if "Temp:" in part:
-                                        temp = part.split("Temp:")[1].strip().split()[0]
+                                        temp_str = part.split("Temp:")[1].strip().split()[0]
+                                        # Remove °F if present, keep only the number
+                                        temp = temp_str.replace("°F", "").replace("Â°F", "")
+                                        # Keep only valid numeric characters
+                                        temp_clean = ""
+                                        for char in temp:
+                                            if char.isdigit() or char == '.' or char == '-':
+                                                temp_clean += char
+                                        temp = temp_clean if temp_clean else "N/A"
                                     elif "Battery:" in part:
-                                        battery = part.split("Battery:")[1].strip().split()[0]
+                                        battery_str = part.split("Battery:")[1].strip()
+                                        # Extract first word (ok, low, etc)
+                                        battery_parts = battery_str.split()
+                                        battery = battery_parts[0] if battery_parts else "N/A"
                                     elif "WiFi:" in part:
-                                        wifi = part.split("WiFi:")[1].strip().split("/")[0]
-                except:
+                                        wifi_str = part.split("WiFi:")[1].strip()
+                                        # Extract number before /5
+                                        wifi_parts = wifi_str.split("/")
+                                        try:
+                                            wifi = int(wifi_parts[0])
+                                        except:
+                                            wifi = 0
+                except Exception as e:
+                    print(f"Error parsing log for {cam_name}: {e}")
                     pass
 
             camera_data.append({

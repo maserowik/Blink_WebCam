@@ -1,0 +1,75 @@
+﻿import asyncio
+from aiohttp import ClientSession
+from blinkpy.blinkpy import Blink
+from blinkpy.auth import Auth, BlinkTwoFARequiredError
+
+
+def get_user_input():
+    """Prompt user for camera names and URLs."""
+    # Get camera names
+    cameras = []
+    print("\nEnter camera names (type 'done' when finished):")
+    while True:
+        camera_name = input("Camera name: ").strip()
+        if camera_name.lower() == 'done':
+            break
+        if camera_name:
+            cameras.append(camera_name)
+
+    # Get URLs
+    base_url = input("\nEnter the base URL: ").strip()
+    media_url = input("Enter the media URL: ").strip()
+
+    return cameras, {"base_url": base_url, "media_url": media_url}
+
+
+async def start():
+    """Setup Blink authentication and save credentials"""
+    # Create a session
+    session = ClientSession()
+
+    # Initialize Blink with the session
+    blink = Blink(session=session)
+
+    try:
+        # Start will prompt for username and password
+        await blink.start()
+    except BlinkTwoFARequiredError:
+        # If 2FA is required, prompt for it
+        await blink.prompt_2fa()
+
+    # Save the credentials
+    token_file = "blink_token.json"
+
+    # Get user input for cameras and URLs
+    cameras, urls = get_user_input()
+
+    # Add cameras and URLs to Blink's data
+    blink.data["cameras"] = cameras
+    blink.data["urls"] = urls
+
+    await blink.save(token_file)
+
+    print(f"\n✓ Credentials saved to {token_file}")
+    print(f"✓ Setup complete!")
+
+    # Display available cameras
+    if cameras:
+        print(f"\n✓ Found {len(cameras)} camera(s):")
+        for name in cameras:
+            print(f"  - {name}")
+    else:
+        print("\n⚠ No cameras found on your account")
+
+    # Close the session
+    await session.close()
+
+    return blink
+
+
+if __name__ == "__main__":
+    try:
+        blink = asyncio.run(start())
+        print("\n✓ Authentication successful!")
+    except Exception as e:
+        print(f"\n✗ Error: {type(e).__name__}: {e}")
