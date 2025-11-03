@@ -32,3 +32,15 @@ Thumbs.db
 #############################
 *.tmp
 *.bak
+
+#############################
+# Visual Studio Workspace
+#############################
+.vs/
+
+#############################
+# Logs & Token Files
+#############################
+logs/
+blink_token.json
+save/blink_token.json
