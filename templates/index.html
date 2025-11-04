@@ -35,24 +35,29 @@
             --header-text: #ffffff;
         }
 
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: var(--bg-primary);
-            min-height: 100vh;
-            padding: 20px;
             transition: background 0.3s ease;
-            overflow-x: hidden; /* Prevent horizontal scroll */
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
         }
 
         .header {
             text-align: center;
             color: var(--header-text);
-            margin-bottom: 30px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            max-width: 1400px;
-            margin: 0 auto 30px auto;
+            padding: 5px 10px;
+            flex-shrink: 0;
         }
 
         .header-content {
@@ -61,33 +66,34 @@
         }
 
         .header h1 {
-            font-size: clamp(1.5em, 4vw, 2.5em);
-            margin-bottom: 10px;
+            font-size: clamp(1.2em, 2.5vw, 1.8em);
+            margin-bottom: 3px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
         }
 
         .header p {
-            font-size: clamp(0.9em, 2vw, 1.1em);
+            font-size: clamp(0.75em, 1.5vw, 0.95em);
             opacity: 0.9;
         }
 
         .current-datetime {
-            font-size: clamp(1em, 2vw, 1.3em);
+            font-size: clamp(0.85em, 1.5vw, 1.05em);
             font-weight: 600;
-            margin-top: 10px;
+            margin-top: 3px;
             opacity: 0.95;
             text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
         }
 
         .theme-toggle {
             position: relative;
-            width: 60px;
-            height: 30px;
+            width: 50px;
+            height: 25px;
             background: rgba(255,255,255,0.2);
-            border-radius: 30px;
+            border-radius: 25px;
             cursor: pointer;
             transition: background 0.3s;
             backdrop-filter: blur(10px);
+            flex-shrink: 0;
         }
 
         .theme-toggle:hover {
@@ -96,134 +102,60 @@
 
         .theme-toggle-slider {
             position: absolute;
-            top: 3px;
-            left: 3px;
-            width: 24px;
-            height: 24px;
+            top: 2px;
+            left: 2px;
+            width: 21px;
+            height: 21px;
             background: white;
             border-radius: 50%;
             transition: transform 0.3s;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 14px;
+            font-size: 12px;
         }
 
         [data-theme="dark"] .theme-toggle-slider {
-            transform: translateX(30px);
+            transform: translateX(25px);
         }
 
         .container {
-            max-width: 100%;
-            margin: 0 auto;
-            padding: 0 20px;
-            overflow-x: hidden; /* Prevent horizontal scroll */
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+            padding: 0 5px;
         }
 
         .camera-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-            margin-bottom: 20px;
-            width: 100%;
-            max-width: 100%;
-        }
-
-        /* 4K and Ultra-Wide - 4 columns if 4+ cameras */
-        @media (min-width: 2560px) {
-            .camera-grid[data-camera-count="4"],
-            .camera-grid[data-camera-count="5"],
-            .camera-grid[data-camera-count="6"],
-            .camera-grid[data-camera-count="7"],
-            .camera-grid[data-camera-count="8"] {
-                grid-template-columns: repeat(4, 1fr);
-            }
-        }
-
-        /* Full HD Large - 3 columns if 3+ cameras */
-        @media (min-width: 1920px) and (max-width: 2559px) {
-            .camera-grid[data-camera-count="3"],
-            .camera-grid[data-camera-count="4"],
-            .camera-grid[data-camera-count="5"],
-            .camera-grid[data-camera-count="6"] {
-                grid-template-columns: repeat(3, 1fr);
-            }
-            .camera-grid[data-camera-count="7"],
-            .camera-grid[data-camera-count="8"] {
-                grid-template-columns: repeat(4, 1fr);
-            }
-        }
-
-        /* Standard Desktop (1440-1919px) - Default 2x2 */
-        @media (min-width: 1440px) and (max-width: 1919px) {
-            .camera-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-
-        /* Laptop (1024-1439px) - 2 columns */
-        @media (min-width: 1024px) and (max-width: 1439px) {
-            .camera-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-
-        /* Tablet (768-1023px) - 2 columns */
-        @media (min-width: 768px) and (max-width: 1023px) {
-            .camera-grid {
-                grid-template-columns: repeat(2, 1fr);
-            }
-        }
-
-        /* Mobile (< 768px) - 1 column */
-        @media (max-width: 767px) {
-            .camera-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .header {
-                flex-direction: column;
-                gap: 15px;
-            }
-
-            .container {
-                padding: 0 10px;
-            }
-        }
-
-        /* Ultra-wide monitors (21:9 aspect ratio) */
-        @media (min-aspect-ratio: 21/9) and (min-width: 2560px) {
-            .camera-grid[data-camera-count="4"],
-            .camera-grid[data-camera-count="5"],
-            .camera-grid[data-camera-count="6"] {
-                grid-template-columns: repeat(4, 1fr);
-            }
-            .camera-grid[data-camera-count="7"],
-            .camera-grid[data-camera-count="8"] {
-                grid-template-columns: repeat(4, 1fr);
-            }
+            gap: 10px;
+            flex: 1;
+            min-height: 0;
         }
 
         .camera-card {
             background: var(--bg-card);
-            border-radius: 15px;
+            border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-            transition: transform 0.3s ease, background 0.3s ease;
-            position: relative;
-            height: fit-content;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            transition: transform 0.2s ease, background 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
 
         .camera-card:hover {
-            transform: translateY(-5px);
+            transform: translateY(-2px);
         }
 
         .camera-image-container {
             position: relative;
-            width: 100%;
-            padding-bottom: 75%;
+            flex: 1;
             background: #000;
             overflow: hidden;
+            min-height: 0;
         }
 
         .carousel-wrapper {
@@ -240,7 +172,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain;
             opacity: 0;
             transition: opacity 0.5s ease-in-out;
         }
@@ -252,17 +184,17 @@
 
         .carousel-controls {
             position: absolute;
-            bottom: 10px;
+            bottom: 8px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
-            gap: 8px;
+            gap: 6px;
             z-index: 10;
         }
 
         .carousel-dot {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             background: rgba(255,255,255,0.5);
             cursor: pointer;
@@ -281,11 +213,11 @@
             background: rgba(0,0,0,0.5);
             color: white;
             border: none;
-            width: 40px;
-            height: 40px;
+            width: 32px;
+            height: 32px;
             border-radius: 50%;
             cursor: pointer;
-            font-size: 20px;
+            font-size: 18px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -298,11 +230,11 @@
         }
 
         .carousel-nav.prev {
-            left: 10px;
+            left: 8px;
         }
 
         .carousel-nav.next {
-            right: 10px;
+            right: 8px;
         }
 
         .camera-overlay {
@@ -310,49 +242,49 @@
             top: 0;
             left: 0;
             right: 0;
-            padding: 15px;
+            padding: 10px;
             background: linear-gradient(to bottom, var(--overlay-bg) 0%, transparent 100%);
             color: white;
             z-index: 10;
         }
 
         .camera-name {
-            font-size: clamp(1.1em, 2.5vw, 1.5em);
+            font-size: clamp(0.9em, 1.8vw, 1.2em);
             font-weight: bold;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
         }
 
         .camera-stats {
             display: flex;
-            gap: 10px;
+            gap: 6px;
             flex-wrap: wrap;
         }
 
         .stat {
             display: flex;
             align-items: center;
-            gap: 5px;
-            font-size: clamp(0.8em, 1.5vw, 0.95em);
+            gap: 4px;
+            font-size: clamp(0.7em, 1.2vw, 0.85em);
             background: var(--stat-bg);
-            padding: 5px 10px;
-            border-radius: 5px;
+            padding: 3px 6px;
+            border-radius: 4px;
             backdrop-filter: blur(5px);
         }
 
         .stat-icon {
-            font-size: 1.2em;
+            font-size: 1.1em;
         }
 
         .image-timestamp {
             position: absolute;
-            bottom: 40px;
-            left: 10px;
+            bottom: 32px;
+            left: 8px;
             background: rgba(0,0,0,0.7);
             color: white;
-            padding: 5px 10px;
-            border-radius: 5px;
-            font-size: 0.9em;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: clamp(0.7em, 1.2vw, 0.85em);
             font-weight: 600;
             z-index: 10;
             backdrop-filter: blur(5px);
@@ -360,22 +292,18 @@
         }
 
         .camera-footer {
-            padding: 15px;
+            padding: 6px 10px;
             background: var(--footer-bg);
-            border-top: 2px solid var(--footer-border);
+            border-top: 1px solid var(--footer-border);
             transition: background 0.3s ease, border-color 0.3s ease;
-        }
-
-        .timestamp {
-            color: var(--text-secondary);
-            font-size: clamp(0.75em, 1.5vw, 0.9em);
-            transition: color 0.3s ease;
+            flex-shrink: 0;
         }
 
         .image-counter {
             color: var(--text-secondary);
-            font-size: 0.85em;
+            font-size: clamp(0.7em, 1.2vw, 0.8em);
             transition: color 0.3s ease;
+            text-align: center;
         }
 
         .no-cameras {
@@ -391,11 +319,11 @@
             display: flex;
             gap: 2px;
             align-items: flex-end;
-            height: 16px;
+            height: 14px;
         }
 
         .wifi-bar {
-            width: 3px;
+            width: 2.5px;
             background: #666;
             border-radius: 1px;
         }
@@ -404,16 +332,16 @@
             background: #4CAF50;
         }
 
-        .wifi-bar:nth-child(1) { height: 4px; }
-        .wifi-bar:nth-child(2) { height: 7px; }
-        .wifi-bar:nth-child(3) { height: 10px; }
-        .wifi-bar:nth-child(4) { height: 13px; }
-        .wifi-bar:nth-child(5) { height: 16px; }
+        .wifi-bar:nth-child(1) { height: 3px; }
+        .wifi-bar:nth-child(2) { height: 6px; }
+        .wifi-bar:nth-child(3) { height: 9px; }
+        .wifi-bar:nth-child(4) { height: 12px; }
+        .wifi-bar:nth-child(5) { height: 14px; }
 
         .battery-indicator {
             display: inline-block;
-            padding: 2px 8px;
-            border-radius: 4px;
+            padding: 2px 6px;
+            border-radius: 3px;
             font-weight: bold;
         }
 
@@ -435,28 +363,52 @@
         .refresh-info {
             text-align: center;
             color: var(--header-text);
-            margin-top: 20px;
+            padding: 4px 0;
             opacity: 0.8;
-            font-size: clamp(0.8em, 1.5vw, 1em);
+            font-size: clamp(0.65em, 1.2vw, 0.8em);
+            flex-shrink: 0;
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 767px) {
+            .camera-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 8px;
+            }
+        }
+
+        /* Wide screen optimization */
+        @media (min-width: 2560px) and (min-height: 1200px) {
+            .camera-grid {
+                gap: 15px;
+            }
+
+            .camera-card {
+                border-radius: 12px;
+            }
         }
     </style>
 </head>
 <body data-theme="light">
-    <div class="container">
-        <div class="header">
-            <div style="width: 60px;"></div>
-            <div class="header-content">
-                <h1>🎥 Blink Camera Monitor</h1>
-                <p>Real-time camera surveillance dashboard</p>
-                <div class="current-datetime" id="currentDateTime"></div>
-            </div>
-            <div class="theme-toggle" onclick="toggleTheme()">
-                <div class="theme-toggle-slider">
-                    <span id="themeIcon">☀️</span>
-                </div>
+    <div class="header">
+        <div style="width: 50px;"></div>
+        <div class="header-content">
+            <h1>🎥 Blink Camera Monitor</h1>
+            <p>Real-time camera surveillance dashboard</p>
+            <div class="current-datetime" id="currentDateTime"></div>
+        </div>
+        <div class="theme-toggle" onclick="toggleTheme()">
+            <div class="theme-toggle-slider">
+                <span id="themeIcon">☀️</span>
             </div>
         </div>
+    </div>
 
+    <div class="container">
         {% if cameras %}
         <div class="camera-grid" id="cameraGrid" data-camera-count="{{ cameras|length }}">
             {% for camera in cameras %}
@@ -485,7 +437,7 @@
                                 {% endfor %}
                             </div>
                         {% else %}
-                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 1.5em;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 1.2em;">
                             No Images Available
                         </div>
                         {% endif %}
@@ -518,7 +470,7 @@
 
                 <div class="camera-footer">
                     <div class="image-counter">
-                        Showing <span class="current-image">1</span> of <span class="total-images">{{ camera.images|length }}</span>
+                        <span class="current-image">1</span> / <span class="total-images">{{ camera.images|length }}</span>
                     </div>
                 </div>
             </div>
@@ -532,81 +484,17 @@
         {% endif %}
 
         <div class="refresh-info">
-            <p>🔄 Stats update every 5 minutes | Images cycle every 3 seconds</p>
+            <p>🔄 Updates every 5 min | Cycles every 3 sec</p>
         </div>
     </div>
 
     <script>
         const carouselStates = {};
-        const AUTO_CYCLE_INTERVAL = 3000; // 3 seconds
-
-        // Detect screen resolution and apply optimal grid layout
-        function applyOptimalLayout() {
-            const screenWidth = window.screen.width;
-            const screenHeight = window.screen.height;
-            const windowWidth = window.innerWidth;
-            const cameraGrid = document.getElementById('cameraGrid');
-            const cameraCount = parseInt(cameraGrid?.dataset.cameraCount || 0);
-
-            console.log(`Screen Resolution: ${screenWidth}x${screenHeight}`);
-            console.log(`Window Width: ${windowWidth}px`);
-            console.log(`Camera Count: ${cameraCount}`);
-
-            if (!cameraGrid) return;
-
-            // Remove any existing dynamic classes
-            cameraGrid.classList.remove('grid-1col', 'grid-2col', 'grid-3col', 'grid-4col');
-
-            // Determine optimal column count based on actual screen width
-            let columns = 2; // Default 2x2
-
-            if (windowWidth >= 3840) {
-                // 4K or higher - can fit 4 columns
-                columns = cameraCount >= 4 ? 4 : Math.min(cameraCount, 2);
-            } else if (windowWidth >= 2560) {
-                // QHD/1440p wide - can fit 3-4 columns
-                if (cameraCount === 4) {
-                    columns = 2; // Keep 4 cameras as 2x2
-                } else if (cameraCount >= 6) {
-                    columns = 3;
-                } else {
-                    columns = 2;
-                }
-            } else if (windowWidth >= 1920) {
-                // Full HD (1920x1080) - Your display!
-                // Always use 2 columns for clean 2x2 grid
-                columns = 2;
-            } else if (windowWidth >= 1440) {
-                // Smaller desktop
-                columns = 2;
-            } else if (windowWidth >= 1024) {
-                // Laptop
-                columns = 2;
-            } else if (windowWidth >= 768) {
-                // Tablet
-                columns = 2;
-            } else {
-                // Mobile
-                columns = 1;
-            }
-
-            // Apply the column count
-            cameraGrid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
-
-            console.log(`Applied ${columns} columns for ${cameraCount} cameras`);
-        }
-
-        // Apply layout on load
-        applyOptimalLayout();
-
-        // Reapply layout when window is resized
-        window.addEventListener('resize', applyOptimalLayout);
+        const AUTO_CYCLE_INTERVAL = 3000;
 
         // Update current date and time
         function updateDateTime() {
             const now = new Date();
-
-            // Format date
             const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
             const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -615,14 +503,13 @@
             const date = now.getDate();
             const year = now.getFullYear();
 
-            // Format time in 12-hour format
             let hours = now.getHours();
             const minutes = now.getMinutes();
             const seconds = now.getSeconds();
             const ampm = hours >= 12 ? 'PM' : 'AM';
 
             hours = hours % 12;
-            hours = hours ? hours : 12; // Convert 0 to 12
+            hours = hours ? hours : 12;
 
             const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} ${ampm}`;
             const dateString = `${dayName}, ${monthName} ${date}, ${year}`;
@@ -630,7 +517,6 @@
             document.getElementById('currentDateTime').innerHTML = `${dateString}<br>${timeString}`;
         }
 
-        // Update time immediately and then every second
         updateDateTime();
         setInterval(updateDateTime, 1000);
 
@@ -645,14 +531,12 @@
                 autoPlayInterval: null
             };
 
-            // Set initial timestamp
             if (images.length > 0) {
                 const firstImage = images[0];
                 const filename = firstImage.dataset.filename || firstImage.src.split('/').pop().split('?')[0];
                 updateImageTimestamp(cameraName, filename);
             }
 
-            // Start auto-play
             startAutoPlay(cameraName);
         });
 
@@ -662,28 +546,23 @@
             const dots = card.querySelectorAll('.carousel-dot');
             const state = carouselStates[cameraName];
 
-            // Update active image
             images.forEach((img, i) => {
                 img.classList.toggle('active', i === index);
             });
 
-            // Update active dot
             dots.forEach((dot, i) => {
                 dot.classList.toggle('active', i === index);
             });
 
-            // Update counter
             card.querySelector('.current-image').textContent = index + 1;
             state.currentIndex = index;
 
-            // Update timestamp from filename
             const activeImage = images[index];
             if (activeImage) {
                 const filename = activeImage.dataset.filename || activeImage.src.split('/').pop().split('?')[0];
                 updateImageTimestamp(cameraName, filename);
             }
 
-            // Reset auto-play
             stopAutoPlay(cameraName);
             startAutoPlay(cameraName);
         }
@@ -692,11 +571,10 @@
             const timestampElement = document.getElementById(`timestamp-${cameraName}`);
             if (!timestampElement) return;
 
-            // Extract timestamp from filename (format: camera-name_YYYYMMDD_HHMMSS.jpg)
             const match = filename.match(/_(\d{8})_(\d{6})/);
             if (match) {
-                const dateStr = match[1]; // YYYYMMDD
-                const timeStr = match[2]; // HHMMSS
+                const dateStr = match[1];
+                const timeStr = match[2];
 
                 const year = dateStr.substring(0, 4);
                 const month = dateStr.substring(4, 6);
@@ -749,7 +627,6 @@
             }
         }
 
-        // Theme toggle
         function toggleTheme() {
             const body = document.body;
             const currentTheme = body.getAttribute('data-theme');
@@ -761,12 +638,10 @@
             localStorage.setItem('theme', newTheme);
         }
 
-        // Load saved theme
         const savedTheme = localStorage.getItem('theme') || 'light';
         document.body.setAttribute('data-theme', savedTheme);
         document.getElementById('themeIcon').textContent = savedTheme === 'light' ? '☀️' : '🌙';
 
-        // Refresh camera data
         async function refreshCameras() {
             try {
                 const response = await fetch('/api/cameras');
@@ -776,7 +651,6 @@
                     const card = document.querySelector(`[data-camera="${camera.normalized_name}"]`);
                     if (!card) return;
 
-                    // Update stats
                     const tempValue = card.querySelector('.temp-value');
                     if (tempValue) tempValue.textContent = camera.temperature + '°F';
 
@@ -793,7 +667,6 @@
                         bar.classList.toggle('active', i < camera.wifi);
                     });
 
-                    // Check for new images and update carousel without page reload
                     const currentImages = Array.from(card.querySelectorAll('.camera-image')).map(img =>
                         img.src.split('/').pop().split('?')[0]
                     );
@@ -816,19 +689,13 @@
             const carouselWrapper = card.querySelector('.carousel-wrapper');
             const state = carouselStates[cameraName];
 
-            // Stop current auto-play
             stopAutoPlay(cameraName);
 
-            // Get current active index
-            const currentIndex = state.currentIndex;
-
-            // Clear existing images and dots
             const oldImages = carouselWrapper.querySelectorAll('.camera-image');
             const oldDots = card.querySelectorAll('.carousel-dot');
             oldImages.forEach(img => img.remove());
             oldDots.forEach(dot => dot.remove());
 
-            // Add new images
             newImages.forEach((imageName, index) => {
                 const img = document.createElement('img');
                 img.src = `/image/${cameraName}/${imageName}?t=${Date.now()}`;
@@ -838,12 +705,10 @@
                 img.dataset.filename = imageName;
                 img.onerror = function() { this.style.display = 'none'; };
 
-                // Insert before timestamp overlay
                 const timestampOverlay = carouselWrapper.querySelector('.image-timestamp');
                 carouselWrapper.insertBefore(img, timestampOverlay);
             });
 
-            // Add new dots
             const dotsContainer = card.querySelector('.carousel-controls');
             newImages.forEach((_, index) => {
                 const dot = document.createElement('div');
@@ -852,31 +717,26 @@
                 dotsContainer.appendChild(dot);
             });
 
-            // Update state and counter
             state.totalImages = newImages.length;
             state.currentIndex = 0;
             card.querySelector('.current-image').textContent = '1';
             card.querySelector('.total-images').textContent = newImages.length;
 
-            // Update timestamp for first image
             if (newImages.length > 0) {
                 updateImageTimestamp(cameraName, newImages[0]);
             }
 
-            // Restart auto-play
             startAutoPlay(cameraName);
 
             console.log(`Updated carousel for ${cameraName} with ${newImages.length} images`);
         }
 
-        setInterval(refreshCameras, 300000); // Check every 5 minutes (300 seconds)
+        setInterval(refreshCameras, 300000);
 
         document.addEventListener('visibilitychange', function() {
             if (document.hidden) {
-                // Stop all auto-play when tab is hidden
                 Object.keys(carouselStates).forEach(stopAutoPlay);
             } else {
-                // Resume auto-play when tab is visible
                 Object.keys(carouselStates).forEach(startAutoPlay);
                 refreshCameras();
             }
