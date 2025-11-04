@@ -114,7 +114,7 @@ async def countdown(seconds: int):
 
 
 async def wait_until_next_interval(interval_seconds):
-    """Wait until the next aligned interval (0, 5, 10â€¦ minutes) with live countdown"""
+    """Wait until the next aligned interval (0, 5, 10… minutes) with live countdown"""
     now = datetime.now()
     interval_minutes = interval_seconds // 60
     minutes_to_wait = interval_minutes - (now.minute % interval_minutes)
@@ -168,11 +168,11 @@ async def take_snapshot(blink):
             if isinstance(result, bytes) and len(result) > 1000:
                 image_bytes = result
                 source = "snap_picture"
-                log_main(f"  âœ“ snap_picture returned {len(image_bytes)} bytes")
+                log_main(f"  ✓ snap_picture returned {len(image_bytes)} bytes")
             else:
-                log_main(f"  âœ— snap_picture returned invalid data: {type(result)}")
+                log_main(f"  ✗ snap_picture returned invalid data: {type(result)}")
         except Exception as e:
-            log_main(f"  âœ— snap_picture error: {type(e).__name__}: {e}")
+            log_main(f"  ✗ snap_picture error: {type(e).__name__}: {e}")
 
         # ---------------- Method 2: Use get_media() as fallback ---------------- #
         if not image_bytes:
@@ -182,11 +182,11 @@ async def take_snapshot(blink):
                 if response.status == 200:
                     image_bytes = await response.read()
                     source = "get_media"
-                    log_main(f"  âœ“ get_media returned {len(image_bytes)} bytes")
+                    log_main(f"  ✓ get_media returned {len(image_bytes)} bytes")
                 else:
-                    log_main(f"  âœ— get_media returned non-200: {response.status}")
+                    log_main(f"  ✗ get_media returned non-200: {response.status}")
             except Exception as e:
-                log_main(f"  âœ— get_media error: {type(e).__name__}: {e}")
+                log_main(f"  ✗ get_media error: {type(e).__name__}: {e}")
 
         # ---------------- Method 3: Placeholder if both fail ---------------- #
         if not image_bytes:
@@ -194,23 +194,23 @@ async def take_snapshot(blink):
             img_path = cam_folder / img_name
             placeholder = Image.new("RGB", (640, 480), color=(255, 0, 0))
             placeholder.save(img_path)
-            log_main(f"  âœ—âœ—âœ— FAILED: No image data, saved placeholder")
+            log_main(f"  ✗✗✗ FAILED: No image data, saved placeholder")
         else:
             img_name = f"{normalize_camera_name(cam_name)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
             img_path = cam_folder / img_name
             try:
                 with open(img_path, "wb") as f:
                     f.write(image_bytes)
-                log_main(f"  âœ“âœ“âœ“ SUCCESS: Saved {img_name} ({source}, {len(image_bytes)} bytes)")
+                log_main(f"  ✓✓✓ SUCCESS: Saved {img_name} ({source}, {len(image_bytes)} bytes)")
             except Exception as e:
-                log_main(f"  âœ— Error saving image: {e}")
+                log_main(f"  ✗ Error saving image: {e}")
                 img_name = "error_" + img_name
 
         trim_images(cam_folder)
 
         # Log camera info
         log_entry = (
-            f"{timestamp} | Temp: {cam.temperature}Â°F | Battery: {cam.battery} | "
+            f"{timestamp} | Temp: {cam.temperature}°F | Battery: {cam.battery} | "
             f"WiFi: {bars}/5 | Image: {img_name} | Source: {source} | "
             f"Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')} | "
             f"Armed: {getattr(cam, 'armed', 'N/A')}\n"
@@ -220,7 +220,7 @@ async def take_snapshot(blink):
         trim_log(log_file)
 
         print(f"\n--- {cam_name} ---")
-        print(f"Temperature: {cam.temperature}Â°F")
+        print(f"Temperature: {cam.temperature}°F")
         print(f"Battery: {cam.battery}")
         print(f"WiFi: {bars}/5")
         print(f"Image: {img_name} ({source})")

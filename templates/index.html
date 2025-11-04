@@ -41,6 +41,7 @@
             min-height: 100vh;
             padding: 20px;
             transition: background 0.3s ease;
+            overflow-x: hidden; /* Prevent horizontal scroll */
         }
 
         .header {
@@ -113,8 +114,10 @@
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 100%;
             margin: 0 auto;
+            padding: 0 20px;
+            overflow-x: hidden; /* Prevent horizontal scroll */
         }
 
         .camera-grid {
@@ -122,16 +125,58 @@
             grid-template-columns: repeat(2, 1fr);
             gap: 20px;
             margin-bottom: 20px;
+            width: 100%;
+            max-width: 100%;
         }
 
-        /* Auto-adjust for smaller screens */
-        @media (max-width: 1024px) {
+        /* 4K and Ultra-Wide - 4 columns if 4+ cameras */
+        @media (min-width: 2560px) {
+            .camera-grid[data-camera-count="4"],
+            .camera-grid[data-camera-count="5"],
+            .camera-grid[data-camera-count="6"],
+            .camera-grid[data-camera-count="7"],
+            .camera-grid[data-camera-count="8"] {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        /* Full HD Large - 3 columns if 3+ cameras */
+        @media (min-width: 1920px) and (max-width: 2559px) {
+            .camera-grid[data-camera-count="3"],
+            .camera-grid[data-camera-count="4"],
+            .camera-grid[data-camera-count="5"],
+            .camera-grid[data-camera-count="6"] {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            .camera-grid[data-camera-count="7"],
+            .camera-grid[data-camera-count="8"] {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        /* Standard Desktop (1440-1919px) - Default 2x2 */
+        @media (min-width: 1440px) and (max-width: 1919px) {
             .camera-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
 
-        @media (max-width: 768px) {
+        /* Laptop (1024-1439px) - 2 columns */
+        @media (min-width: 1024px) and (max-width: 1439px) {
+            .camera-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Tablet (768-1023px) - 2 columns */
+        @media (min-width: 768px) and (max-width: 1023px) {
+            .camera-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        /* Mobile (< 768px) - 1 column */
+        @media (max-width: 767px) {
             .camera-grid {
                 grid-template-columns: 1fr;
             }
@@ -139,6 +184,23 @@
             .header {
                 flex-direction: column;
                 gap: 15px;
+            }
+
+            .container {
+                padding: 0 10px;
+            }
+        }
+
+        /* Ultra-wide monitors (21:9 aspect ratio) */
+        @media (min-aspect-ratio: 21/9) and (min-width: 2560px) {
+            .camera-grid[data-camera-count="4"],
+            .camera-grid[data-camera-count="5"],
+            .camera-grid[data-camera-count="6"] {
+                grid-template-columns: repeat(4, 1fr);
+            }
+            .camera-grid[data-camera-count="7"],
+            .camera-grid[data-camera-count="8"] {
+                grid-template-columns: repeat(4, 1fr);
             }
         }
 
@@ -313,7 +375,6 @@
         .image-counter {
             color: var(--text-secondary);
             font-size: 0.85em;
-            margin-top: 5px;
             transition: color 0.3s ease;
         }
 
@@ -397,7 +458,7 @@
         </div>
 
         {% if cameras %}
-        <div class="camera-grid" id="cameraGrid">
+        <div class="camera-grid" id="cameraGrid" data-camera-count="{{ cameras|length }}">
             {% for camera in cameras %}
             <div class="camera-card" data-camera="{{ camera.normalized_name }}">
                 <div class="camera-image-container">
@@ -478,6 +539,68 @@
     <script>
         const carouselStates = {};
         const AUTO_CYCLE_INTERVAL = 3000; // 3 seconds
+
+        // Detect screen resolution and apply optimal grid layout
+        function applyOptimalLayout() {
+            const screenWidth = window.screen.width;
+            const screenHeight = window.screen.height;
+            const windowWidth = window.innerWidth;
+            const cameraGrid = document.getElementById('cameraGrid');
+            const cameraCount = parseInt(cameraGrid?.dataset.cameraCount || 0);
+
+            console.log(`Screen Resolution: ${screenWidth}x${screenHeight}`);
+            console.log(`Window Width: ${windowWidth}px`);
+            console.log(`Camera Count: ${cameraCount}`);
+
+            if (!cameraGrid) return;
+
+            // Remove any existing dynamic classes
+            cameraGrid.classList.remove('grid-1col', 'grid-2col', 'grid-3col', 'grid-4col');
+
+            // Determine optimal column count based on actual screen width
+            let columns = 2; // Default 2x2
+
+            if (windowWidth >= 3840) {
+                // 4K or higher - can fit 4 columns
+                columns = cameraCount >= 4 ? 4 : Math.min(cameraCount, 2);
+            } else if (windowWidth >= 2560) {
+                // QHD/1440p wide - can fit 3-4 columns
+                if (cameraCount === 4) {
+                    columns = 2; // Keep 4 cameras as 2x2
+                } else if (cameraCount >= 6) {
+                    columns = 3;
+                } else {
+                    columns = 2;
+                }
+            } else if (windowWidth >= 1920) {
+                // Full HD (1920x1080) - Your display!
+                // Always use 2 columns for clean 2x2 grid
+                columns = 2;
+            } else if (windowWidth >= 1440) {
+                // Smaller desktop
+                columns = 2;
+            } else if (windowWidth >= 1024) {
+                // Laptop
+                columns = 2;
+            } else if (windowWidth >= 768) {
+                // Tablet
+                columns = 2;
+            } else {
+                // Mobile
+                columns = 1;
+            }
+
+            // Apply the column count
+            cameraGrid.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
+
+            console.log(`Applied ${columns} columns for ${cameraCount} cameras`);
+        }
+
+        // Apply layout on load
+        applyOptimalLayout();
+
+        // Reapply layout when window is resized
+        window.addEventListener('resize', applyOptimalLayout);
 
         // Update current date and time
         function updateDateTime() {
