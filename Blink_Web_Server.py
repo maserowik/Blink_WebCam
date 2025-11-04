@@ -49,12 +49,15 @@ def get_camera_data():
             cam_folder = CAMERAS_DIR / normalized_name
             log_file = LOG_FOLDER / f"{normalized_name}.log"
 
-            # Get latest image
-            latest_image = None
+            # Get latest 5 images (sorted by modification time, newest first)
+            images = []
             if cam_folder.exists():
-                images = sorted(cam_folder.glob("*.jpg"), key=lambda x: x.stat().st_mtime, reverse=True)
-                if images:
-                    latest_image = images[0].name
+                all_images = sorted(
+                    cam_folder.glob("*.jpg"),
+                    key=lambda x: x.stat().st_mtime,
+                    reverse=True
+                )
+                images = [img.name for img in all_images[:5]]
 
             # Get latest log entry
             temp = "N/A"
@@ -74,9 +77,7 @@ def get_camera_data():
                                 for part in parts:
                                     if "Temp:" in part:
                                         temp_str = part.split("Temp:")[1].strip().split()[0]
-                                        # Remove °F if present, keep only the number
                                         temp = temp_str.replace("°F", "").replace("Â°F", "")
-                                        # Keep only valid numeric characters
                                         temp_clean = ""
                                         for char in temp:
                                             if char.isdigit() or char == '.' or char == '-':
@@ -84,12 +85,10 @@ def get_camera_data():
                                         temp = temp_clean if temp_clean else "N/A"
                                     elif "Battery:" in part:
                                         battery_str = part.split("Battery:")[1].strip()
-                                        # Extract first word (ok, low, etc)
                                         battery_parts = battery_str.split()
                                         battery = battery_parts[0] if battery_parts else "N/A"
                                     elif "WiFi:" in part:
                                         wifi_str = part.split("WiFi:")[1].strip()
-                                        # Extract number before /5
                                         wifi_parts = wifi_str.split("/")
                                         try:
                                             wifi = int(wifi_parts[0])
@@ -102,7 +101,7 @@ def get_camera_data():
             camera_data.append({
                 "name": cam_name,
                 "normalized_name": normalized_name,
-                "image": latest_image,
+                "images": images,  # Now returning list of 5 images
                 "temperature": temp,
                 "battery": battery,
                 "wifi": wifi,
