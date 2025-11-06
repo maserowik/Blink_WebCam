@@ -36,7 +36,7 @@ async def start():
         await blink.prompt_2fa()
 
     # Save the credentials
-    token_file = "blink_tokentest.json"
+    token_file = "blink_token.json"
 
     # Get user input for cameras
     cameras = get_user_input()
