@@ -1,0 +1,12 @@
+{
+    "cameras": [
+        "Front Door",
+        "Tree Front Door",
+        "Back Door",
+        "Garage Door"
+    ],
+    "poll_interval": 300,
+    "max_images": 1,
+    "log_retention_days": 5,
+    "max_log_entries": 1024
+}

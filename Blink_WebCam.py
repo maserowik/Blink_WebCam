@@ -2,11 +2,41 @@ import asyncio
 from aiohttp import ClientSession
 from blinkpy.blinkpy import Blink
 from blinkpy.auth import Auth
+from blinkpy.helpers.util import BlinkURLHandler
 from datetime import datetime, timedelta
 from pathlib import Path
 import json
 import os
+import sys
+import warnings
 from PIL import Image
+
+# Suppress the specific blinkpy warning about last_refresh
+warnings.filterwarnings("ignore", message=".*last_refresh.*")
+
+# Redirect stderr to suppress blinkpy interval calculation errors
+import io
+
+
+class SuppressSpecificErrors:
+    def __init__(self, stderr):
+        self.stderr = stderr
+        self.suppress_patterns = [
+            "Error calculating interval",
+            "unsupported operand type(s) for -: 'NoneType' and 'int'"
+        ]
+
+    def write(self, text):
+        # Only write if it doesn't contain our suppressed patterns
+        if not any(pattern in text for pattern in self.suppress_patterns):
+            self.stderr.write(text)
+
+    def flush(self):
+        self.stderr.flush()
+
+
+# Replace stderr with our filtered version
+sys.stderr = SuppressSpecificErrors(sys.stderr)
 
 # ---------------- Configuration ---------------- #
 CONFIG_FILE = "blink_token.json"
@@ -30,6 +60,7 @@ CAMERAS_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FOLDER.mkdir(parents=True, exist_ok=True)
 
 MAIN_LOG_FILE = LOG_FOLDER / "main.log"
+TOKEN_LOG_FILE = LOG_FOLDER / "token.log"
 
 
 # ---------------- Utility Functions ---------------- #
@@ -61,6 +92,16 @@ def log_main(msg: str):
     with open(MAIN_LOG_FILE, "a", encoding="utf-8") as f:
         f.write(line)
     print(line.strip())
+
+
+def log_token(msg: str):
+    """Log token refresh events to dedicated token.log file"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"{timestamp} | {msg}\n"
+    with open(TOKEN_LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(line)
+    # Also log to main log
+    log_main(msg)
 
 
 def get_camera_log_file(cam_name: str) -> Path:
@@ -145,7 +186,7 @@ async def take_snapshot(blink):
             log_main(f"Skipping {cam_name} (not in config)")
             continue
 
-        log_main(f"\n{'=' * 60}")
+        log_main(f"{'=' * 60}")
         log_main(f"Processing camera: {cam_name}")
         log_main(f"{'=' * 60}")
 
@@ -229,21 +270,35 @@ async def take_snapshot(blink):
 
 # ---------------- Main Blink Polling ---------------- #
 async def poll_blink():
+    # Load saved token data
     with open(TOKEN_FILE, "r") as f:
         token_data = json.load(f)
 
     async with ClientSession() as session:
         blink = Blink(session=session)
-        blink.auth = Auth(token_data, session=session)
 
-        urls = token_data.get("urls", {})
-        blink.urls = urls
-        blink.base_url = urls.get("base_url")
-        blink.media_url = urls.get("media_url")
+        # Extract the region code from the host URL (e.g., "u044" from "https://rest-u044.immedia-semi.com")
+        host_url = token_data.get("host", "")
+        region_id = host_url.replace("https://rest-", "").replace(".immedia-semi.com", "")
+
+        # CRITICAL: Create Auth with empty dict to prevent prompting
+        blink.auth = Auth({}, session=session, no_prompt=True)
+
+        # Manually set ALL auth properties from the saved token
+        blink.auth.region_id = region_id
+        blink.auth.host = host_url
+        blink.auth.token = token_data.get("token")
+        blink.auth.refresh_token = token_data.get("refresh_token")
+        blink.auth.client_id = token_data.get("client_id")
+        blink.auth.account_id = token_data.get("account_id")
+        blink.auth.user_id = token_data.get("user_id")
+
+        # Initialize the URLs handler with just the region_id (e.g., "u044")
+        blink.urls = BlinkURLHandler(region_id)
 
         try:
-            await blink.start()
-            await blink.refresh()
+            # Setup using existing authentication
+            await blink.setup_post_verify()
 
             log_main("=" * 50)
             log_main("CAMERAS FOUND BY API:")
@@ -254,7 +309,9 @@ async def poll_blink():
             log_main("=" * 50)
 
         except Exception as e:
-            log_main(f"Error during Blink start/refresh: {e}")
+            log_main(f"Error during Blink setup: {e}")
+            import traceback
+            log_main(traceback.format_exc())
             return
 
         last_token_mtime = os.path.getmtime(TOKEN_FILE)
@@ -266,19 +323,32 @@ async def poll_blink():
         while True:
             try:
                 await blink.refresh()
-                await blink.save(TOKEN_FILE)
 
-                # Detect token refresh
+                # Check if token was updated
                 current_token_mtime = os.path.getmtime(TOKEN_FILE)
                 if current_token_mtime != last_token_mtime:
                     last_token_mtime = current_token_mtime
-                    log_main("Token refreshed successfully.")
+
+                    # Load the refreshed token to get details
+                    with open(TOKEN_FILE, "r") as f:
+                        refreshed_token = json.load(f)
+
+                    # Log token refresh with details
+                    log_token(f"Token refreshed successfully")
+                    log_token(f"  New token (first 20 chars): {refreshed_token.get('token', '')[:20]}...")
+                    log_token(f"  Account ID: {refreshed_token.get('account_id')}")
+                    log_token(f"  Region: {refreshed_token.get('host')}")
+
+                # Save the potentially updated token
+                await blink.save(TOKEN_FILE)
 
                 await take_snapshot(blink)
                 await wait_until_next_interval(POLL_INTERVAL)
 
             except Exception as e:
                 log_main(f"Error during polling loop: {e}")
+                import traceback
+                log_main(traceback.format_exc())
                 await asyncio.sleep(30)
 
 
