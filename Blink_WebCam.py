@@ -39,12 +39,34 @@ class SuppressSpecificErrors:
 sys.stderr = SuppressSpecificErrors(sys.stderr)
 
 # ---------------- Configuration ---------------- #
-CONFIG_FILE = "blink_token.json"
+TOKEN_FILE = "blink_token.json"
+CONFIG_FILE = "blink_config.json"
 
-with open(CONFIG_FILE, "r") as f:
-    config = json.load(f)
+# Load token
+with open(TOKEN_FILE, "r") as f:
+    token_data = json.load(f)
 
-TOKEN_FILE = CONFIG_FILE
+# Load config (or use defaults)
+if Path(CONFIG_FILE).exists():
+    with open(CONFIG_FILE, "r") as f:
+        config = json.load(f)
+else:
+    # Create default config file
+    config = {
+        "poll_interval": 300,
+        "max_images": 10080,
+        "log_retention_days": 5,
+        "max_log_entries": 1024,
+        "cameras": [
+            "Front Door",
+            "Tree Front Door",
+            "Back Door",
+            "Garage Door"
+        ]
+    }
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f, indent=4)
+
 POLL_INTERVAL = config.get("poll_interval", 300)  # seconds
 MAX_IMAGES = config.get("max_images", 10080)
 LOG_RETENTION_DAYS = config.get("log_retention_days", 5)

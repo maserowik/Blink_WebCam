@@ -1,3 +1,5 @@
+from pickle import FALSE
+
 from flask import Flask, render_template, send_file, jsonify
 from pathlib import Path
 import json
@@ -6,7 +8,7 @@ from datetime import datetime
 app = Flask(__name__)
 
 # Configuration
-CONFIG_FILE = "blink_token.json"
+CONFIG_FILE = "blink_config.json"
 ROOT_DIR = Path(".")
 CAMERAS_DIR = ROOT_DIR / "cameras"
 LOG_FOLDER = ROOT_DIR / "logs"
@@ -140,4 +142,4 @@ def get_image(camera_name, image_name):
 if __name__ == '__main__':
     print("Starting Blink Camera Web Server...")
     print("Open your browser to: http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)

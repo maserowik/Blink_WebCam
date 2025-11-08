@@ -6,7 +6,7 @@
         "Garage Door"
     ],
     "poll_interval": 300,
-    "max_images": 1,
+    "max_images": 10080,
     "log_retention_days": 5,
     "max_log_entries": 1024
 }

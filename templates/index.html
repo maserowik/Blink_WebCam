@@ -1,746 +1,959 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blink Camera Monitor</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎥 Blink Camera Monitor</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
 
-        :root {
-            --bg-primary: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            --bg-card: #ffffff;
-            --text-primary: #333333;
-            --text-secondary: #6c757d;
-            --overlay-bg: rgba(0,0,0,0.7);
-            --footer-bg: #f8f9fa;
-            --footer-border: #e9ecef;
-            --stat-bg: rgba(0,0,0,0.5);
-            --header-text: #ffffff;
-        }
+:root {
+    --bg-gradient-start: #667eea;
+    --bg-gradient-end: #764ba2;
+    --card-bg: white;
+    --card-text: #333;
+    --card-subtext: #666;
+    --stat-bg: #f8f9fa;
+    --stat-text: #333;
+    --header-bg: rgba(255,255,255,0.95);
+    --header-text: #333;
+    --subtitle-text: #666;
+    --timestamp-text: #888;
+    --alert-critical: #e53e3e;
+    --alert-warning: #ed8936;
+    --alert-info: #4299e1;
+}
 
-        [data-theme="dark"] {
-            --bg-primary: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-            --bg-card: #2d3748;
-            --text-primary: #e2e8f0;
-            --text-secondary: #a0aec0;
-            --overlay-bg: rgba(0,0,0,0.8);
-            --footer-bg: #1a202c;
-            --footer-border: #4a5568;
-            --stat-bg: rgba(0,0,0,0.7);
-            --header-text: #ffffff;
-        }
+[data-theme="dark"] {
+    --bg-gradient-start: #1a1a2e;
+    --bg-gradient-end: #16213e;
+    --card-bg: #2d3748;
+    --card-text: #e2e8f0;
+    --card-subtext: #a0aec0;
+    --stat-bg: #1a202c;
+    --stat-text: #e2e8f0;
+    --header-bg: rgba(45, 55, 72, 0.95);
+    --header-text: #e2e8f0;
+    --subtitle-text: #a0aec0;
+    --timestamp-text: #cbd5e0;
+}
 
-        html, body {
-            height: 100%;
-            width: 100%;
-            overflow: hidden;
-        }
+html {
+    height: 100%;
+    width: 100%;
+}
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: var(--bg-primary);
-            transition: background 0.3s ease;
-            display: flex;
-            flex-direction: column;
-            padding: 10px;
-        }
+body {
+    min-height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+    background-attachment: fixed;
+    transition: background 0.3s ease;
+}
 
-        .header {
-            text-align: center;
-            color: var(--header-text);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 5px 10px;
-            flex-shrink: 0;
-        }
+.container {
+    width: 100%;
+    padding: clamp(8px, 2vw, 20px);
+    box-sizing: border-box;
+}
 
-        .header-content {
-            flex: 1;
-            text-align: center;
-        }
+/* Alert Banner */
+.alert-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: none;
+    flex-direction: column;
+    gap: 0;
+    max-height: 50vh;
+    overflow-y: auto;
+}
 
-        .header h1 {
-            font-size: clamp(1.2em, 2.5vw, 1.8em);
-            margin-bottom: 3px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
+.alert-banner.show {
+    display: flex;
+}
 
-        .header p {
-            font-size: clamp(0.75em, 1.5vw, 0.95em);
-            opacity: 0.9;
-        }
+.alert-item {
+    padding: 15px 20px;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    animation: slideDown 0.3s ease-out;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
 
-        .current-datetime {
-            font-size: clamp(0.85em, 1.5vw, 1.05em);
-            font-weight: 600;
-            margin-top: 3px;
-            opacity: 0.95;
-            text-shadow: 1px 1px 3px rgba(0,0,0,0.3);
-        }
+.alert-item.critical {
+    background: var(--alert-critical);
+}
 
-        .theme-toggle {
-            position: relative;
-            width: 50px;
-            height: 25px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 25px;
-            cursor: pointer;
-            transition: background 0.3s;
-            backdrop-filter: blur(10px);
-            flex-shrink: 0;
-        }
+.alert-item.warning {
+    background: var(--alert-warning);
+}
 
-        .theme-toggle:hover {
-            background: rgba(255,255,255,0.3);
-        }
+.alert-item.info {
+    background: var(--alert-info);
+}
 
-        .theme-toggle-slider {
-            position: absolute;
-            top: 2px;
-            left: 2px;
-            width: 21px;
-            height: 21px;
-            background: white;
-            border-radius: 50%;
-            transition: transform 0.3s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 12px;
-        }
+.alert-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
 
-        [data-theme="dark"] .theme-toggle-slider {
-            transform: translateX(25px);
-        }
+.alert-icon {
+    font-size: 1.5em;
+    animation: alertPulse 2s infinite;
+}
 
-        .container {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-            padding: 0 5px;
-        }
+.alert-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
 
-        .camera-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-            flex: 1;
-            min-height: 0;
-        }
+.alert-title {
+    font-weight: bold;
+    font-size: 1.1em;
+}
 
-        .camera-card {
-            background: var(--bg-card);
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            transition: transform 0.2s ease, background 0.3s ease;
-            display: flex;
-            flex-direction: column;
-            min-height: 0;
-        }
+.alert-message {
+    font-size: 0.9em;
+    opacity: 0.95;
+}
 
-        .camera-card:hover {
-            transform: translateY(-2px);
-        }
+.alert-close {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
 
-        .camera-image-container {
-            position: relative;
-            flex: 1;
-            background: #000;
-            overflow: hidden;
-            min-height: 0;
-        }
+.alert-close:hover {
+    background: rgba(255,255,255,0.3);
+}
 
-        .carousel-wrapper {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
+@keyframes slideDown {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
 
-        .camera-image {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            opacity: 0;
-            transition: opacity 0.5s ease-in-out;
-        }
+@keyframes alertPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
 
-        .camera-image.active {
-            opacity: 1;
-            z-index: 1;
-        }
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
 
-        .carousel-controls {
-            position: absolute;
-            bottom: 8px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 6px;
-            z-index: 10;
-        }
+body.has-alerts .container {
+    margin-top: 0;
+}
 
-        .carousel-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.5);
-            cursor: pointer;
-            transition: all 0.3s;
-        }
+header {
+    background: var(--header-bg);
+    padding: clamp(12px, 2vw, 20px) clamp(15px, 3vw, 30px);
+    border-radius: clamp(8px, 1.5vw, 15px);
+    margin-bottom: clamp(15px, 3vw, 30px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: clamp(10px, 2vw, 20px);
+    transition: background 0.3s ease;
+}
 
-        .carousel-dot.active {
-            background: white;
-            transform: scale(1.2);
-        }
+.header-left {
+    flex: 1;
+    min-width: 200px;
+}
 
-        .carousel-nav {
-            position: absolute;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(0,0,0,0.5);
-            color: white;
-            border: none;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 18px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: background 0.3s;
-            z-index: 10;
-        }
+h1 {
+    color: var(--header-text);
+    font-size: clamp(1.2em, 4vw, 2em);
+    margin-bottom: clamp(2px, 0.5vw, 5px);
+    transition: color 0.3s ease;
+}
 
-        .carousel-nav:hover {
-            background: rgba(0,0,0,0.7);
-        }
+.subtitle {
+    color: var(--subtitle-text);
+    font-size: clamp(0.75em, 2vw, 1em);
+    transition: color 0.3s ease;
+}
 
-        .carousel-nav.prev {
-            left: 8px;
-        }
+.timestamp {
+    color: var(--timestamp-text);
+    font-size: clamp(0.7em, 1.8vw, 0.9em);
+    margin-top: clamp(5px, 1vw, 10px);
+    transition: color 0.3s ease;
+}
 
-        .carousel-nav.next {
-            right: 8px;
-        }
+.status-indicator {
+    display: inline-block;
+    width: clamp(8px, 1vw, 10px);
+    height: clamp(8px, 1vw, 10px);
+    border-radius: 50%;
+    background: #4CAF50;
+    animation: pulse 2s infinite;
+    margin-right: 5px;
+}
 
-        .camera-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            padding: 10px;
-            background: linear-gradient(to bottom, var(--overlay-bg) 0%, transparent 100%);
-            color: white;
-            z-index: 10;
-        }
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: clamp(10px, 2vw, 15px);
+    flex-wrap: wrap;
+}
 
-        .camera-name {
-            font-size: clamp(0.9em, 1.8vw, 1.2em);
-            font-weight: bold;
-            margin-bottom: 6px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-        }
+.theme-toggle {
+    position: relative;
+    width: clamp(50px, 8vw, 60px);
+    height: clamp(25px, 4vw, 30px);
+    background: rgba(128, 128, 128, 0.3);
+    border-radius: 30px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    flex-shrink: 0;
+}
 
-        .camera-stats {
-            display: flex;
-            gap: 6px;
-            flex-wrap: wrap;
-        }
+.theme-toggle:hover {
+    background: rgba(128, 128, 128, 0.4);
+}
 
-        .stat {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            font-size: clamp(0.7em, 1.2vw, 0.85em);
-            background: var(--stat-bg);
-            padding: 3px 6px;
-            border-radius: 4px;
-            backdrop-filter: blur(5px);
-        }
+.theme-toggle-slider {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: clamp(19px, 3.2vw, 24px);
+    height: clamp(19px, 3.2vw, 24px);
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(10px, 2vw, 14px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
 
-        .stat-icon {
-            font-size: 1.1em;
-        }
+[data-theme="dark"] .theme-toggle {
+    background: rgba(100, 100, 200, 0.3);
+}
 
-        .image-timestamp {
-            position: absolute;
-            bottom: 32px;
-            left: 8px;
-            background: rgba(0,0,0,0.7);
-            color: white;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: clamp(0.7em, 1.2vw, 0.85em);
-            font-weight: 600;
-            z-index: 10;
-            backdrop-filter: blur(5px);
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-        }
+[data-theme="dark"] .theme-toggle-slider {
+    transform: translateX(clamp(25px, 4vw, 30px));
+}
 
-        .camera-footer {
-            padding: 6px 10px;
-            background: var(--footer-bg);
-            border-top: 1px solid var(--footer-border);
-            transition: background 0.3s ease, border-color 0.3s ease;
-            flex-shrink: 0;
-        }
+.weather-widget {
+    background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+    color: white;
+    padding: clamp(10px, 2vw, 15px) clamp(15px, 3vw, 25px);
+    border-radius: clamp(8px, 1.5vw, 12px);
+    min-width: clamp(180px, 30vw, 250px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
 
-        .image-counter {
-            color: var(--text-secondary);
-            font-size: clamp(0.7em, 1.2vw, 0.8em);
-            transition: color 0.3s ease;
-            text-align: center;
-        }
+.weather-main {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 2vw, 15px);
+    margin-bottom: clamp(5px, 1vw, 10px);
+}
 
-        .no-cameras {
-            text-align: center;
-            color: white;
-            padding: 40px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 15px;
-            backdrop-filter: blur(10px);
-        }
+.weather-icon { font-size: clamp(2em, 5vw, 3em); }
+.weather-temp { font-size: clamp(1.5em, 4vw, 2.5em); font-weight: bold; }
+.weather-details { font-size: clamp(0.75em, 1.8vw, 0.9em); opacity: 0.9; }
+.weather-location { font-weight: bold; margin-bottom: 5px; }
+.weather-condition { text-transform: capitalize; }
+.weather-loading { text-align: center; opacity: 0.8; }
 
-        .wifi-bars {
-            display: flex;
-            gap: 2px;
-            align-items: flex-end;
-            height: 14px;
-        }
+.camera-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: clamp(12px, 2.5vw, 25px);
+    margin-bottom: clamp(15px, 3vw, 30px);
+}
 
-        .wifi-bar {
-            width: 2.5px;
-            background: #666;
-            border-radius: 1px;
-        }
+.camera-card {
+    background: var(--card-bg);
+    border-radius: clamp(8px, 1.5vw, 15px);
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    transition: transform 0.3s ease, background 0.3s ease;
+    position: relative;
+}
 
-        .wifi-bar.active {
-            background: #4CAF50;
-        }
+.camera-card:hover { transform: translateY(-5px); }
 
-        .wifi-bar:nth-child(1) { height: 3px; }
-        .wifi-bar:nth-child(2) { height: 6px; }
-        .wifi-bar:nth-child(3) { height: 9px; }
-        .wifi-bar:nth-child(4) { height: 12px; }
-        .wifi-bar:nth-child(5) { height: 14px; }
+.camera-card.offline {
+    opacity: 0.6;
+    border: 3px solid var(--alert-critical);
+}
 
-        .battery-indicator {
-            display: inline-block;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-weight: bold;
-        }
+.camera-header {
+    background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+    color: white;
+    padding: clamp(10px, 2vw, 15px) clamp(12px, 2.5vw, 20px);
+    font-size: clamp(1em, 2.5vw, 1.2em);
+    font-weight: bold;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
 
-        .battery-ok {
-            background: #4CAF50;
-            color: white;
-        }
+.offline-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: var(--alert-critical);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 0.8em;
+    font-weight: bold;
+    animation: pulse 2s infinite;
+}
 
-        .battery-low {
-            background: #ff9800;
-            color: white;
-        }
+.camera-timestamp {
+    font-size: clamp(0.7em, 1.8vw, 0.85em);
+    color: #f0f0f0;
+    margin-top: 4px;
+    font-weight: normal;
+}
 
-        .battery-critical {
-            background: #f44336;
-            color: white;
-        }
+.camera-image-container {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 75%;
+    background: #000;
+    overflow: hidden;
+}
 
-        .refresh-info {
-            text-align: center;
-            color: var(--header-text);
-            padding: 4px 0;
-            opacity: 0.8;
-            font-size: clamp(0.65em, 1.2vw, 0.8em);
-            flex-shrink: 0;
-        }
+.camera-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+}
 
-        /* Mobile adjustments */
-        @media (max-width: 767px) {
-            .camera-grid {
-                grid-template-columns: 1fr;
-            }
+.camera-image.active { display: block; }
 
-            .header {
-                flex-direction: column;
-                gap: 8px;
-            }
-        }
+.image-nav {
+    position: absolute;
+    bottom: clamp(5px, 1.5vw, 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: clamp(4px, 1vw, 8px);
+    background: rgba(0,0,0,0.6);
+    padding: clamp(5px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
+    border-radius: 20px;
+}
 
-        /* Wide screen optimization */
-        @media (min-width: 2560px) and (min-height: 1200px) {
-            .camera-grid {
-                gap: 15px;
-            }
+.nav-dot {
+    width: clamp(8px, 1.5vw, 10px);
+    height: clamp(8px, 1.5vw, 10px);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: all 0.3s;
+}
 
-            .camera-card {
-                border-radius: 12px;
-            }
-        }
-    </style>
+.nav-dot.active {
+    background: white;
+    width: clamp(20px, 3vw, 25px);
+    border-radius: 5px;
+}
+
+.camera-stats {
+    padding: clamp(12px, 2.5vw, 20px);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(8px, 2vw, 15px);
+}
+
+.stat {
+    text-align: center;
+    padding: clamp(8px, 1.5vw, 10px);
+    background: var(--stat-bg);
+    border-radius: clamp(6px, 1vw, 8px);
+    transition: background 0.3s ease;
+    position: relative;
+}
+
+.stat.alert {
+    background: var(--alert-warning);
+    color: white;
+}
+
+.stat.alert .stat-label,
+.stat.alert .stat-value {
+    color: white;
+}
+
+.stat.critical {
+    background: var(--alert-critical);
+    color: white;
+}
+
+.stat.critical .stat-label,
+.stat.critical .stat-value {
+    color: white;
+}
+
+.stat.critical .stat-value {
+    animation: pulse 2s infinite;
+}
+
+.stat-label {
+    font-size: clamp(0.65em, 1.5vw, 0.8em);
+    color: var(--card-subtext);
+    margin-bottom: clamp(3px, 0.8vw, 5px);
+    transition: color 0.3s ease;
+}
+
+.stat-value {
+    font-size: clamp(0.9em, 2.2vw, 1.3em);
+    font-weight: bold;
+    color: var(--stat-text);
+    transition: color 0.3s ease;
+}
+
+.wifi-bars {
+    display: inline-flex;
+    gap: clamp(1px, 0.3vw, 2px);
+    align-items: flex-end;
+    height: clamp(15px, 3vw, 20px);
+}
+
+.wifi-bar {
+    width: clamp(3px, 0.6vw, 4px);
+    background: #ddd;
+    border-radius: 2px;
+}
+
+.wifi-bar.active { background: #4CAF50; }
+.wifi-bar:nth-child(1){height:20%;}
+.wifi-bar:nth-child(2){height:40%;}
+.wifi-bar:nth-child(3){height:60%;}
+.wifi-bar:nth-child(4){height:80%;}
+.wifi-bar:nth-child(5){height:100%;}
+
+.no-cameras {
+    text-align: center;
+    padding: clamp(40px, 8vw, 60px) clamp(15px, 3vw, 20px);
+    background: var(--header-bg);
+    border-radius: clamp(10px, 2vw, 15px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    transition: background 0.3s ease;
+}
+
+.no-cameras h2{
+    color: var(--header-text);
+    margin-bottom: clamp(10px, 2vw, 15px);
+    font-size: clamp(1.2em, 3vw, 1.5em);
+    transition: color 0.3s ease;
+}
+
+.no-cameras p{
+    color: var(--subtitle-text);
+    font-size: clamp(0.9em, 2vw, 1.1em);
+    transition: color 0.3s ease;
+}
+
+footer {
+    text-align: center;
+    color: white;
+    padding: clamp(15px, 3vw, 20px);
+    font-size: clamp(0.75em, 1.8vw, 0.9em);
+}
+
+@media(max-width: 768px){
+    header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .header-left {
+        text-align: center;
+    }
+
+    .header-right {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .weather-widget {
+        width: 100%;
+        min-width: auto;
+    }
+
+    .camera-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .camera-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .stat {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: clamp(10px, 2vw, 12px);
+    }
+
+    .stat-label {
+        text-align: left;
+        margin-bottom: 0;
+    }
+
+    .alert-banner {
+        font-size: 0.9em;
+    }
+
+    .alert-item {
+        padding: 12px 15px;
+    }
+}
+
+@media(max-width: 480px){
+    body {
+        padding: 5px;
+    }
+
+    .camera-image-container {
+        padding-bottom: 75%;
+    }
+}
+
+@media(min-width: 1400px){
+    .camera-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media(min-width: 1920px){
+    .camera-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media(min-width: 768px) and (max-width: 1399px){
+    .camera-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style>
 </head>
 <body data-theme="light">
-    <div class="header">
-        <div style="width: 50px;"></div>
-        <div class="header-content">
-            <h1>🎥 Blink Camera Monitor</h1>
-            <p>Real-time camera surveillance dashboard</p>
-            <div class="current-datetime" id="currentDateTime"></div>
+
+<!-- Alert Banner -->
+<div class="alert-banner" id="alert-banner"></div>
+
+<div class="container">
+<header>
+    <div class="header-left">
+        <h1>🎥 Blink Camera Monitor</h1>
+        <p class="subtitle">Real-time camera surveillance dashboard</p>
+        <p class="timestamp">
+            <span class="status-indicator"></span>
+            <span id="current-time"></span>
+        </p>
+    </div>
+    <div class="header-right">
+        <div class="weather-widget" id="weather-widget">
+            <div class="weather-loading">Loading weather...</div>
         </div>
         <div class="theme-toggle" onclick="toggleTheme()">
             <div class="theme-toggle-slider">
-                <span id="themeIcon">☀️</span>
+                <span id="theme-icon">☀️</span>
             </div>
         </div>
     </div>
+</header>
 
-    <div class="container">
-        {% if cameras %}
-        <div class="camera-grid" id="cameraGrid" data-camera-count="{{ cameras|length }}">
-            {% for camera in cameras %}
-            <div class="camera-card" data-camera="{{ camera.normalized_name }}">
-                <div class="camera-image-container">
-                    <div class="carousel-wrapper">
-                        {% if camera.images %}
-                            {% for image in camera.images %}
-                            <img src="/image/{{ camera.normalized_name }}/{{ image }}?t={{ loop.index }}"
-                                 alt="{{ camera.name }}"
-                                 class="camera-image {% if loop.first %}active{% endif %}"
-                                 data-index="{{ loop.index0 }}"
-                                 data-filename="{{ image }}"
-                                 onerror="this.style.display='none'">
-                            {% endfor %}
+{% if cameras %}
+<div class="camera-grid">
+    {% for camera in cameras %}
+    <div class="camera-card {% if camera.images|length == 0 %}offline{% endif %}" data-camera="{{ camera.normalized_name }}">
+        <div class="camera-header">
+            {% if camera.images|length == 0 %}
+            <div class="offline-badge">OFFLINE</div>
+            {% endif %}
+            {{ camera.name }}
+            <div class="camera-timestamp" id="timestamp-{{ camera.normalized_name }}"></div>
+        </div>
 
-                            <div class="image-timestamp" id="timestamp-{{ camera.normalized_name }}"></div>
-
-                            <!-- <button class="carousel-nav prev" onclick="changeImage('{{ camera.normalized_name }}', -1)">‹</button> -->
-                            <!-- <button class="carousel-nav next" onclick="changeImage('{{ camera.normalized_name }}', 1)">›</button> -->
-
-                            <div class="carousel-controls">
-                                {% for image in camera.images %}
-                                <div class="carousel-dot {% if loop.first %}active{% endif %}"
-                                     onclick="showImage('{{ camera.normalized_name }}', {{ loop.index0 }})"></div>
-                                {% endfor %}
-                            </div>
-                        {% else %}
-                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 1.2em;">
-                            No Images Available
-                        </div>
-                        {% endif %}
-                    </div>
-
-                    <div class="camera-overlay">
-                        <div class="camera-name">{{ camera.name }}</div>
-                        <div class="camera-stats">
-                            <div class="stat">
-                                <span class="stat-icon">🌡️</span>
-                                <span class="temp-value">{{ camera.temperature }}°F</span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-icon">🔋</span>
-                                <span class="battery-indicator battery-value {% if camera.battery == 'ok' or camera.battery == 'okay' %}battery-ok{% elif camera.battery == 'low' %}battery-low{% else %}battery-critical{% endif %}">
-                                    {{ camera.battery }}
-                                </span>
-                            </div>
-                            <div class="stat">
-                                <span class="stat-icon">📶</span>
-                                <div class="wifi-bars">
-                                    {% for i in range(1, 6) %}
-                                    <div class="wifi-bar {% if i <= camera.wifi|int %}active{% endif %}"></div>
-                                    {% endfor %}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+        <div class="camera-image-container">
+            {% if camera.images %}
+                {% for image in camera.images %}
+                <img src="/image/{{ camera.normalized_name }}/{{ image }}"
+                     alt="{{ camera.name }}"
+                     class="camera-image {% if loop.first %}active{% endif %}"
+                     data-camera="{{ camera.normalized_name }}"
+                     data-index="{{ loop.index0 }}"
+                     data-filename="{{ image }}">
+                {% endfor %}
+                {% if camera.images|length > 1 %}
+                <div class="image-nav">
+                    {% for image in camera.images %}
+                    <div class="nav-dot {% if loop.first %}active{% endif %}"
+                         data-camera="{{ camera.normalized_name }}"
+                         data-index="{{ loop.index0 }}"></div>
+                    {% endfor %}
                 </div>
+                {% endif %}
+            {% else %}
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-size:clamp(0.9em, 2vw, 1.1em);flex-direction:column;gap:10px;">
+                <div style="font-size:3em;">📵</div>
+                <div>Camera Offline</div>
+            </div>
+            {% endif %}
+        </div>
 
-                <div class="camera-footer">
-                    <div class="image-counter">
-                        <span class="current-image">1</span> / <span class="total-images">{{ camera.images|length }}</span>
+        <div class="camera-stats">
+            <div class="stat {% if camera.temperature != 'N/A' %}{% set temp_val = camera.temperature|replace('°F','')|replace('Â','')|replace('Ã‚','')|float(0) %}{% if temp_val >= 100 or temp_val <= 32 %}alert{% endif %}{% endif %}">
+                <div class="stat-label">Temperature</div>
+                <div class="stat-value">
+                    {% if camera.temperature != 'N/A' %}
+                        {% set temp_val = camera.temperature|replace('°F','')|replace('Â','')|replace('Ã‚','')|float(0) %}
+                        {% if temp_val >= 100 %}🔥 {% elif temp_val <= 32 %}❄️ {% endif %}
+                    {% endif %}
+                    {{ camera.temperature }}°F
+                </div>
+            </div>
+            <div class="stat" data-battery="{{ camera.battery }}">
+                <div class="stat-label">Battery</div>
+                <div class="stat-value" id="battery-{{ camera.normalized_name }}">
+                    {{ camera.battery }}
+                </div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">WiFi</div>
+                <div class="stat-value">
+                    <div class="wifi-bars">
+                        {% for i in range(1,6) %}
+                        <div class="wifi-bar {% if i <= camera.wifi %}active{% endif %}"></div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>
-            {% endfor %}
-        </div>
-        {% else %}
-        <div class="no-cameras">
-            <h2>No cameras configured</h2>
-            <p>Run <code>python blink_setup.py</code> to configure your cameras</p>
-        </div>
-        {% endif %}
-
-        <div class="refresh-info">
-            <p>🔄 Updates every 5 min | Cycles every 3 sec</p>
         </div>
     </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="no-cameras">
+    <h2>No cameras configured</h2>
+    <p>Run `python blink_setup.py` to configure your cameras</p>
+</div>
+{% endif %}
 
-    <script>
-        const carouselStates = {};
-        const AUTO_CYCLE_INTERVAL = 3000;
+<footer>
+    📄 Updates every 5 min | Cycles every 3 sec
+</footer>
+</div>
 
-        // Update current date and time
-        function updateDateTime() {
-            const now = new Date();
-            const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+<script>
+// Configuration
+const TEMP_HOT_THRESHOLD = 100; // °F
+const TEMP_COLD_THRESHOLD = 32; // °F
+const BATTERY_LOW_THRESHOLD = 20; // %
 
-            const dayName = days[now.getDay()];
-            const monthName = months[now.getMonth()];
-            const date = now.getDate();
-            const year = now.getFullYear();
+// Alert management
+const alerts = new Map();
 
-            let hours = now.getHours();
-            const minutes = now.getMinutes();
-            const seconds = now.getSeconds();
-            const ampm = hours >= 12 ? 'PM' : 'AM';
+function showAlert(id, type, icon, title, message) {
+    if (alerts.has(id)) return;
 
-            hours = hours % 12;
-            hours = hours ? hours : 12;
+    const banner = document.getElementById('alert-banner');
+    const alertItem = document.createElement('div');
+    alertItem.className = `alert-item ${type}`;
+    alertItem.dataset.alertId = id;
 
-            const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')} ${ampm}`;
-            const dateString = `${dayName}, ${monthName} ${date}, ${year}`;
+    alertItem.innerHTML = `
+        <div class="alert-content">
+            <div class="alert-icon">${icon}</div>
+            <div class="alert-text">
+                <div class="alert-title">${title}</div>
+                <div class="alert-message">${message}</div>
+            </div>
+        </div>
+        <button class="alert-close" onclick="dismissAlert('${id}')">✕</button>
+    `;
 
-            document.getElementById('currentDateTime').innerHTML = `${dateString}<br>${timeString}`;
+    banner.appendChild(alertItem);
+    banner.classList.add('show');
+    document.body.classList.add('has-alerts');
+    alerts.set(id, alertItem);
+}
+
+function dismissAlert(id) {
+    const alertItem = alerts.get(id);
+    if (alertItem) {
+        alertItem.style.animation = 'slideDown 0.3s ease-out reverse';
+        setTimeout(() => {
+            alertItem.remove();
+            alerts.delete(id);
+
+            if (alerts.size === 0) {
+                document.getElementById('alert-banner').classList.remove('show');
+                document.body.classList.remove('has-alerts');
+            }
+        }, 300);
+    }
+}
+
+function parseTemperature(tempStr) {
+    if (!tempStr || tempStr === 'N/A') return null;
+    const cleaned = tempStr.replace(/[^\d.-]/g, '');
+    return parseFloat(cleaned);
+}
+
+function parseBattery(batteryStr) {
+    if (!batteryStr || batteryStr === 'N/A' || batteryStr === 'okay') return null;
+    const match = batteryStr.match(/(\d+)/);
+    return match ? parseInt(match[1]) : null;
+}
+
+function checkCameraAlerts() {
+    {% if cameras %}
+    const camerasData = {{ cameras|tojson }};
+
+    camerasData.forEach(camera => {
+        const cameraId = camera.normalized_name;
+
+        // Check if offline
+        if (!camera.images || camera.images.length === 0) {
+            showAlert(
+                `${cameraId}-offline`,
+                'critical',
+                '⚠️',
+                `${camera.name} Offline`,
+                `Camera is not responding - check power and connection`
+            );
         }
 
-        updateDateTime();
-        setInterval(updateDateTime, 1000);
-
-        // Initialize carousel for each camera
-        document.querySelectorAll('.camera-card').forEach(card => {
-            const cameraName = card.dataset.camera;
-            const images = card.querySelectorAll('.camera-image');
-
-            carouselStates[cameraName] = {
-                currentIndex: 0,
-                totalImages: images.length,
-                autoPlayInterval: null
-            };
-
-            if (images.length > 0) {
-                const firstImage = images[0];
-                const filename = firstImage.dataset.filename || firstImage.src.split('/').pop().split('?')[0];
-                updateImageTimestamp(cameraName, filename);
-            }
-
-            startAutoPlay(cameraName);
-        });
-
-        function showImage(cameraName, index) {
-            const card = document.querySelector(`[data-camera="${cameraName}"]`);
-            const images = card.querySelectorAll('.camera-image');
-            const dots = card.querySelectorAll('.carousel-dot');
-            const state = carouselStates[cameraName];
-
-            images.forEach((img, i) => {
-                img.classList.toggle('active', i === index);
-            });
-
-            dots.forEach((dot, i) => {
-                dot.classList.toggle('active', i === index);
-            });
-
-            card.querySelector('.current-image').textContent = index + 1;
-            state.currentIndex = index;
-
-            const activeImage = images[index];
-            if (activeImage) {
-                const filename = activeImage.dataset.filename || activeImage.src.split('/').pop().split('?')[0];
-                updateImageTimestamp(cameraName, filename);
-            }
-
-            stopAutoPlay(cameraName);
-            startAutoPlay(cameraName);
-        }
-
-        function updateImageTimestamp(cameraName, filename) {
-            const timestampElement = document.getElementById(`timestamp-${cameraName}`);
-            if (!timestampElement) return;
-
-            const match = filename.match(/_(\d{8})_(\d{6})/);
-            if (match) {
-                const dateStr = match[1];
-                const timeStr = match[2];
-
-                const year = dateStr.substring(0, 4);
-                const month = dateStr.substring(4, 6);
-                const day = dateStr.substring(6, 8);
-
-                let hours = parseInt(timeStr.substring(0, 2));
-                const minutes = timeStr.substring(2, 4);
-                const seconds = timeStr.substring(4, 6);
-
-                const ampm = hours >= 12 ? 'PM' : 'AM';
-                hours = hours % 12;
-                hours = hours ? hours : 12;
-
-                const formattedTime = `${hours}:${minutes}:${seconds} ${ampm}`;
-                const formattedDate = `${month}/${day}/${year}`;
-
-                timestampElement.textContent = `${formattedDate} ${formattedTime}`;
-            } else {
-                timestampElement.textContent = 'Unknown time';
-            }
-        }
-
-        function changeImage(cameraName, direction) {
-            const state = carouselStates[cameraName];
-            let newIndex = state.currentIndex + direction;
-
-            if (newIndex < 0) {
-                newIndex = state.totalImages - 1;
-            } else if (newIndex >= state.totalImages) {
-                newIndex = 0;
-            }
-
-            showImage(cameraName, newIndex);
-        }
-
-        function startAutoPlay(cameraName) {
-            const state = carouselStates[cameraName];
-            if (state.totalImages > 1) {
-                state.autoPlayInterval = setInterval(() => {
-                    changeImage(cameraName, 1);
-                }, AUTO_CYCLE_INTERVAL);
+        // Check temperature
+        const temp = parseTemperature(camera.temperature);
+        if (temp !== null) {
+            if (temp >= TEMP_HOT_THRESHOLD) {
+                showAlert(
+                    `${cameraId}-hot`,
+                    'warning',
+                    '🔥',
+                    `${camera.name} High Temperature`,
+                    `Temperature is ${temp}°F - camera may be too hot`
+                );
+            } else if (temp <= TEMP_COLD_THRESHOLD) {
+                showAlert(
+                    `${cameraId}-cold`,
+                    'info',
+                    '❄️',
+                    `${camera.name} Low Temperature`,
+                    `Temperature is ${temp}°F - camera may be affected by cold`
+                );
             }
         }
 
-        function stopAutoPlay(cameraName) {
-            const state = carouselStates[cameraName];
-            if (state.autoPlayInterval) {
-                clearInterval(state.autoPlayInterval);
-                state.autoPlayInterval = null;
+        // Check battery
+        const battery = parseBattery(camera.battery);
+        if (battery !== null && battery <= BATTERY_LOW_THRESHOLD) {
+            showAlert(
+                `${cameraId}-battery`,
+                'warning',
+                '🔋',
+                `${camera.name} Low Battery`,
+                `Battery at ${battery}% - please recharge soon`
+            );
+        }
+    });
+    {% endif %}
+}
+
+// Dark mode toggle
+function toggleTheme() {
+    const body = document.body;
+    const currentTheme = body.getAttribute('data-theme');
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    body.setAttribute('data-theme', newTheme);
+    document.getElementById('theme-icon').textContent = newTheme === 'light' ? '☀️' : '🌙';
+    localStorage.setItem('theme', newTheme);
+}
+
+// Load saved theme
+const savedTheme = localStorage.getItem('theme') || 'light';
+document.body.setAttribute('data-theme', savedTheme);
+document.getElementById('theme-icon').textContent = savedTheme === 'light' ? '☀️' : '🌙';
+
+// Current time
+function updateTime(){
+    const now=new Date();
+    document.getElementById('current-time').textContent=now.toLocaleString('en-US',{
+        weekday:'long',year:'numeric',month:'long',day:'numeric',
+        hour:'2-digit',minute:'2-digit',second:'2-digit'
+    });
+}
+updateTime();
+setInterval(updateTime,1000);
+
+// Check battery levels and apply styling with JavaScript
+function checkBatteryLevels() {
+    document.querySelectorAll('[data-battery]').forEach(statDiv => {
+        const batteryStr = statDiv.getAttribute('data-battery');
+        const battery = parseBattery(batteryStr);
+
+        if (battery !== null && battery <= BATTERY_LOW_THRESHOLD) {
+            statDiv.classList.add('critical');
+            const valueDiv = statDiv.querySelector('.stat-value');
+            if (valueDiv && !valueDiv.textContent.includes('⚠️')) {
+                valueDiv.textContent = '⚠️ ' + valueDiv.textContent;
             }
         }
+    });
+}
 
-        function toggleTheme() {
-            const body = document.body;
-            const currentTheme = body.getAttribute('data-theme');
-            const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+// Run battery check after page loads
+checkBatteryLevels();
 
-            body.setAttribute('data-theme', newTheme);
-            document.getElementById('themeIcon').textContent = newTheme === 'light' ? '☀️' : '🌙';
+// Cameras & carousel
+const cameras={};
+document.querySelectorAll('.camera-image').forEach(img=>{
+    const cam=img.dataset.camera;
+    if(!cameras[cam]){
+        cameras[cam]={currentIndex:0,images:document.querySelectorAll(`.camera-image[data-camera="${cam}"]`),dots:document.querySelectorAll(`.nav-dot[data-camera="${cam}"]`)};
+    }
+});
 
-            localStorage.setItem('theme', newTheme);
+function switchImage(cameraName,index){
+    const cam=cameras[cameraName];
+    if(!cam)return;
+    cam.images.forEach(img=>img.classList.remove('active'));
+    cam.dots.forEach(dot=>dot.classList.remove('active'));
+    cam.images[index].classList.add('active');
+    if(cam.dots[index]) cam.dots[index].classList.add('active');
+    cam.currentIndex=index;
+
+    const activeImage=cam.images[index];
+    if(activeImage){
+        const filename=activeImage.dataset.filename || activeImage.src.split('/').pop();
+        updateImageTimestamp(cameraName,filename);
+    }
+}
+
+// Auto-cycle
+setInterval(()=>{
+    Object.keys(cameras).forEach(cameraName=>{
+        const cam=cameras[cameraName];
+        if(cam.images.length>1){
+            const nextIndex=(cam.currentIndex+1)%cam.images.length;
+            switchImage(cameraName,nextIndex);
         }
+    });
+},3000);
 
-        const savedTheme = localStorage.getItem('theme') || 'light';
-        document.body.setAttribute('data-theme', savedTheme);
-        document.getElementById('themeIcon').textContent = savedTheme === 'light' ? '☀️' : '🌙';
+// Nav dots click
+document.querySelectorAll('.nav-dot').forEach(dot=>{
+    dot.addEventListener('click',e=>{
+        const cam=e.target.dataset.camera;
+        const idx=parseInt(e.target.dataset.index);
+        switchImage(cam,idx);
+    });
+});
 
-        async function refreshCameras() {
-            try {
-                const response = await fetch('/api/cameras');
-                const cameras = await response.json();
+// Timestamp function
+function updateImageTimestamp(cameraName,filename){
+    const el=document.getElementById(`timestamp-${cameraName}`);
+    if(!el)return;
+    const match=filename.match(/_(\d{8})_(\d{6})/);
+    if(match){
+        const dateStr=match[1]; const timeStr=match[2];
+        const year=dateStr.substring(0,4),month=dateStr.substring(4,6),day=dateStr.substring(6,8);
+        let hours=parseInt(timeStr.substring(0,2)),minutes=timeStr.substring(2,4),seconds=timeStr.substring(4,6);
+        const ampm=hours>=12?'PM':'AM';
+        hours=hours%12; hours=hours?hours:12;
+        const formattedTime=`${hours}:${minutes}:${seconds} ${ampm}`;
+        const formattedDate=`${month}/${day}/${year}`;
+        el.textContent=`${formattedDate} ${formattedTime}`;
+    } else { el.textContent='Unknown time'; }
+}
 
-                cameras.forEach((camera) => {
-                    const card = document.querySelector(`[data-camera="${camera.normalized_name}"]`);
-                    if (!card) return;
+// Initialize first image timestamps
+Object.keys(cameras).forEach(cameraName => {
+    const cam = cameras[cameraName];
+    if (cam.images.length > 0) {
+        const firstImage = cam.images[0];
+        const filename = firstImage.dataset.filename || firstImage.src.split('/').pop();
+        updateImageTimestamp(cameraName, filename);
+    }
+});
 
-                    const tempValue = card.querySelector('.temp-value');
-                    if (tempValue) tempValue.textContent = camera.temperature + '°F';
+// Weather widget – Bethel Park, PA
+async function fetchWeather(){
+    const widget=document.getElementById('weather-widget');
+    try{
+        const resp=await fetch('https://wttr.in/Bethel%20Park,PA?format=j1');
+        const data=await resp.json();
+        const current=data.current_condition[0];
+        const iconMap={'Sunny':'☀️','Clear':'🌙','Partly cloudy':'⛅','Cloudy':'☁️','Overcast':'☁️','Mist':'🌫️','Fog':'🌫️','Light rain':'🌧️','Moderate rain':'🌧️','Heavy rain':'⛈️','Light snow':'🌨️','Heavy snow':'❄️','Thunderstorm':'⛈️'};
+        const icon=iconMap[current.weatherDesc[0].value]||'🌡️';
+        const tempF=current.temp_F;
+        const feelsLike=current.FeelsLikeF;
+        const condition=current.weatherDesc[0].value;
+        const humidity=current.humidity;
+        widget.innerHTML=`
+            <div class="weather-main">
+                <div class="weather-icon">${icon}</div>
+                <div>
+                    <div class="weather-temp">${tempF}°F</div>
+                    <div class="weather-details">Feels ${feelsLike}°F</div>
+                </div>
+            </div>
+            <div class="weather-details">
+                <div class="weather-location">Bethel Park, PA</div>
+                <div class="weather-condition">${condition}</div>
+                <div>Humidity: ${humidity}%</div>
+            </div>
+        `;
+    }catch(e){
+        console.error('Weather fetch error:', e);
+        widget.innerHTML=`<div class="weather-loading">Weather unavailable</div>`;
+    }
+}
+fetchWeather();
+setInterval(fetchWeather,600000);
 
-                    const batteryValue = card.querySelector('.battery-value');
-                    if (batteryValue) {
-                        batteryValue.textContent = camera.battery;
-                        batteryValue.className = 'battery-indicator battery-value ' +
-                            (camera.battery === 'ok' || camera.battery === 'okay' ? 'battery-ok' :
-                             camera.battery === 'low' ? 'battery-low' : 'battery-critical');
-                    }
+// Check for alerts on page load
+checkCameraAlerts();
 
-                    const wifiBars = card.querySelectorAll('.wifi-bar');
-                    wifiBars.forEach((bar, i) => {
-                        bar.classList.toggle('active', i < camera.wifi);
-                    });
-
-                    const currentImages = Array.from(card.querySelectorAll('.camera-image')).map(img =>
-                        img.src.split('/').pop().split('?')[0]
-                    );
-
-                    if (JSON.stringify(currentImages) !== JSON.stringify(camera.images)) {
-                        updateCarouselImages(camera.normalized_name, camera.images);
-                    }
-                });
-
-                console.log('Refreshed at', new Date().toLocaleTimeString());
-            } catch (error) {
-                console.error('Error refreshing cameras:', error);
-            }
-        }
-
-        function updateCarouselImages(cameraName, newImages) {
-            const card = document.querySelector(`[data-camera="${cameraName}"]`);
-            if (!card) return;
-
-            const carouselWrapper = card.querySelector('.carousel-wrapper');
-            const state = carouselStates[cameraName];
-
-            stopAutoPlay(cameraName);
-
-            const oldImages = carouselWrapper.querySelectorAll('.camera-image');
-            const oldDots = card.querySelectorAll('.carousel-dot');
-            oldImages.forEach(img => img.remove());
-            oldDots.forEach(dot => dot.remove());
-
-            newImages.forEach((imageName, index) => {
-                const img = document.createElement('img');
-                img.src = `/image/${cameraName}/${imageName}?t=${Date.now()}`;
-                img.alt = cameraName;
-                img.className = 'camera-image' + (index === 0 ? ' active' : '');
-                img.dataset.index = index;
-                img.dataset.filename = imageName;
-                img.onerror = function() { this.style.display = 'none'; };
-
-                const timestampOverlay = carouselWrapper.querySelector('.image-timestamp');
-                carouselWrapper.insertBefore(img, timestampOverlay);
-            });
-
-            const dotsContainer = card.querySelector('.carousel-controls');
-            newImages.forEach((_, index) => {
-                const dot = document.createElement('div');
-                dot.className = 'carousel-dot' + (index === 0 ? ' active' : '');
-                dot.onclick = () => showImage(cameraName, index);
-                dotsContainer.appendChild(dot);
-            });
-
-            state.totalImages = newImages.length;
-            state.currentIndex = 0;
-            card.querySelector('.current-image').textContent = '1';
-            card.querySelector('.total-images').textContent = newImages.length;
-
-            if (newImages.length > 0) {
-                updateImageTimestamp(cameraName, newImages[0]);
-            }
-
-            startAutoPlay(cameraName);
-
-            console.log(`Updated carousel for ${cameraName} with ${newImages.length} images`);
-        }
-
-        setInterval(refreshCameras, 300000);
-
-        document.addEventListener('visibilitychange', function() {
-            if (document.hidden) {
-                Object.keys(carouselStates).forEach(stopAutoPlay);
-            } else {
-                Object.keys(carouselStates).forEach(startAutoPlay);
-                refreshCameras();
-            }
-        });
-    </script>
+// Refresh page every 5 min
+setInterval(()=>{location.reload();},300000);
+</script>
 </body>
 </html>
