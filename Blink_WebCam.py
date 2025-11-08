@@ -10,6 +10,7 @@ import os
 import sys
 import warnings
 from PIL import Image
+import time
 
 # Suppress the specific blinkpy warning about last_refresh
 warnings.filterwarnings("ignore", message=".*last_refresh.*")
@@ -103,8 +104,11 @@ def wifi_bars(dbm: int | None) -> int:
 def log_main(msg: str):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp} | {msg}\n"
-    with open(MAIN_LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(line)
+    try:
+        with open(MAIN_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception as e:
+        print(f"ERROR writing to main log: {e}")
     print(line.strip())
 
 
@@ -112,8 +116,11 @@ def log_token(msg: str):
     """Log token refresh events to dedicated token.log file"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp} | {msg}\n"
-    with open(TOKEN_LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(line)
+    try:
+        with open(TOKEN_LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line)
+    except Exception as e:
+        print(f"ERROR writing to token log: {e}")
     # Also log to main log
     log_main(msg)
 
@@ -123,27 +130,66 @@ def get_camera_log_file(cam_name: str) -> Path:
     return LOG_FOLDER / f"{normalized_name}.log"
 
 
+def safe_write_camera_log(log_file: Path, log_entry: str, max_retries: int = 3):
+    """Write to camera log with retry logic and error handling"""
+    for attempt in range(max_retries):
+        try:
+            # Open with explicit encoding and error handling
+            with open(log_file, "a", encoding="utf-8", errors="replace") as f:
+                f.write(log_entry)
+                f.flush()  # Force write to disk
+                os.fsync(f.fileno())  # Ensure OS writes to disk
+
+            # Verify the write succeeded
+            if log_file.exists() and log_file.stat().st_size > 0:
+                return True
+            else:
+                raise IOError(f"Log file appears empty after write: {log_file}")
+
+        except Exception as e:
+            if attempt < max_retries - 1:
+                log_main(f"⚠️ Retry {attempt + 1}/{max_retries} writing to {log_file.name}: {e}")
+                time.sleep(0.2)  # Brief delay before retry
+            else:
+                log_main(f"❌ FAILED to write to {log_file.name} after {max_retries} attempts: {e}")
+                # Try to diagnose the issue
+                try:
+                    if log_file.exists():
+                        log_main(f"   File size: {log_file.stat().st_size} bytes")
+                        log_main(f"   Permissions: {oct(log_file.stat().st_mode)}")
+                except Exception as diag_error:
+                    log_main(f"   Cannot diagnose: {diag_error}")
+                return False
+    return False
+
+
 def trim_log(log_file: Path):
     if not log_file.exists():
         return
-    with open(log_file, "r") as f:
-        lines = f.readlines()
 
-    cutoff = datetime.now() - timedelta(days=LOG_RETENTION_DAYS)
-    filtered_lines = []
-    for line in lines:
-        try:
-            ts_str = line.split(" | ")[0]
-            ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-            if ts >= cutoff:
-                filtered_lines.append(line)
-        except:
-            continue
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
 
-    filtered_lines = filtered_lines[-MAX_LOG_ENTRIES:]
+        cutoff = datetime.now() - timedelta(days=LOG_RETENTION_DAYS)
+        filtered_lines = []
+        for line in lines:
+            try:
+                ts_str = line.split(" | ")[0]
+                ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                if ts >= cutoff:
+                    filtered_lines.append(line)
+            except:
+                continue
 
-    with open(log_file, "w") as f:
-        f.writelines(filtered_lines)
+        filtered_lines = filtered_lines[-MAX_LOG_ENTRIES:]
+
+        with open(log_file, "w", encoding="utf-8") as f:
+            f.writelines(filtered_lines)
+            f.flush()
+            os.fsync(f.fileno())
+    except Exception as e:
+        log_main(f"Error trimming log {log_file.name}: {e}")
 
 
 def ensure_camera_folder(cam_name: str) -> Path:
@@ -286,14 +332,20 @@ async def take_snapshot(blink):
 
         trim_images(cam_folder)
 
-        # Log camera info
+        # Log camera info with robust error handling
         log_entry = (
             f"{timestamp} | Temp: {cam.temperature}°F | Battery: {cam.battery} | "
             f"WiFi: {bars}/5 | Image: {img_name} | Source: {source} | "
             f"Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')}\n"
         )
-        with open(log_file, "a") as f:
-            f.write(log_entry)
+
+        log_main(f"  📝 Writing to camera log: {log_file.name}")
+        success = safe_write_camera_log(log_file, log_entry)
+        if success:
+            log_main(f"  ✓ Camera log updated successfully")
+        else:
+            log_main(f"  ✗ FAILED to update camera log!")
+
         trim_log(log_file)
 
         print(f"\n--- {cam_name} ---")
@@ -301,6 +353,7 @@ async def take_snapshot(blink):
         print(f"Battery: {cam.battery}")
         print(f"WiFi: {bars}/5")
         print(f"Image: {img_name} ({source})")
+        print(f"Log: {'✓' if success else '✗ FAILED'}")
         print("----------------------\n")
 
 
