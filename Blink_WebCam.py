@@ -46,26 +46,18 @@ CONFIG_FILE = "blink_config.json"
 with open(TOKEN_FILE, "r") as f:
     token_data = json.load(f)
 
-# Load config (or use defaults)
-if Path(CONFIG_FILE).exists():
-    with open(CONFIG_FILE, "r") as f:
-        config = json.load(f)
-else:
-    # Create default config file
-    config = {
-        "poll_interval": 300,
-        "max_images": 10080,
-        "log_retention_days": 5,
-        "max_log_entries": 1024,
-        "cameras": [
-            "Front Door",
-            "Tree Front Door",
-            "Back Door",
-            "Garage Door"
-        ]
-    }
-    with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
+# Load config (must exist - created by blink_config_setup.py)
+if not Path(CONFIG_FILE).exists():
+    print("=" * 60)
+    print("❌ ERROR: blink_config.json not found!")
+    print("=" * 60)
+    print("You must run the configuration setup first:")
+    print("  python blink_config_setup.py")
+    print("=" * 60)
+    sys.exit(1)
+
+with open(CONFIG_FILE, "r") as f:
+    config = json.load(f)
 
 POLL_INTERVAL = config.get("poll_interval", 300)  # seconds
 MAX_IMAGES = config.get("max_images", 10080)
@@ -192,6 +184,30 @@ async def wait_until_next_interval(interval_seconds):
     print("\rStarting next snapshot...               ")
 
 
+def load_current_token():
+    """Load current token from file"""
+    try:
+        with open(TOKEN_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return None
+
+
+def has_token_changed(blink):
+    """Check if token has changed compared to saved file"""
+    saved_token_data = load_current_token()
+    if not saved_token_data:
+        return True
+
+    # Compare the actual token values
+    current_token = blink.auth.token
+    current_refresh = blink.auth.refresh_token
+    saved_token = saved_token_data.get("token")
+    saved_refresh = saved_token_data.get("refresh_token")
+
+    return (current_token != saved_token or current_refresh != saved_refresh)
+
+
 # ---------------- Snapshot Function ---------------- #
 async def take_snapshot(blink):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -216,7 +232,6 @@ async def take_snapshot(blink):
         log_file = get_camera_log_file(cam_name)
         bars = wifi_bars(cam.wifi_strength)
 
-        log_main(f"  Armed: {getattr(cam, 'armed', 'N/A')}")
         log_main(f"  Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')}")
         log_main(f"  Battery: {getattr(cam, 'battery', 'N/A')}")
         log_main(f"  Temperature: {getattr(cam, 'temperature', 'N/A')}")
@@ -275,8 +290,7 @@ async def take_snapshot(blink):
         log_entry = (
             f"{timestamp} | Temp: {cam.temperature}°F | Battery: {cam.battery} | "
             f"WiFi: {bars}/5 | Image: {img_name} | Source: {source} | "
-            f"Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')} | "
-            f"Armed: {getattr(cam, 'armed', 'N/A')}\n"
+            f"Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')}\n"
         )
         with open(log_file, "a") as f:
             f.write(log_entry)
@@ -336,8 +350,6 @@ async def poll_blink():
             log_main(traceback.format_exc())
             return
 
-        last_token_mtime = os.path.getmtime(TOKEN_FILE)
-
         # Startup snapshot
         await take_snapshot(blink)
         await wait_until_next_interval(POLL_INTERVAL)
@@ -346,10 +358,10 @@ async def poll_blink():
             try:
                 await blink.refresh()
 
-                # Check if token was updated
-                current_token_mtime = os.path.getmtime(TOKEN_FILE)
-                if current_token_mtime != last_token_mtime:
-                    last_token_mtime = current_token_mtime
+                # Check if token has actually changed
+                if has_token_changed(blink):
+                    # Save the updated token
+                    await blink.save(TOKEN_FILE)
 
                     # Load the refreshed token to get details
                     with open(TOKEN_FILE, "r") as f:
@@ -360,9 +372,6 @@ async def poll_blink():
                     log_token(f"  New token (first 20 chars): {refreshed_token.get('token', '')[:20]}...")
                     log_token(f"  Account ID: {refreshed_token.get('account_id')}")
                     log_token(f"  Region: {refreshed_token.get('host')}")
-
-                # Save the potentially updated token
-                await blink.save(TOKEN_FILE)
 
                 await take_snapshot(blink)
                 await wait_until_next_interval(POLL_INTERVAL)

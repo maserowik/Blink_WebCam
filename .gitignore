@@ -1,46 +1,18 @@
-#############################
-# Python Files & Environments
-#############################
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.env
+# Folders
+cameras/
 .venv/
-venv/
-env/
+**/logs/
+tmp/
+.vs/
 .idea/
-.vscode/
 
-#############################
-# Blink Camera Data
-#############################
-cameras/**/images/
-cameras/**/logs/
-*.jpg
-*.jpeg
-*.png
-
-#############################
-# OS Files
-#############################
+# OS / Editor files
 .DS_Store
 Thumbs.db
+*.pyc
+*.swp
 
-#############################
-# Temporary & Backup Files
-#############################
-*.tmp
-*.bak
+# Project files
+*.log
+*.json
 
-#############################
-# Visual Studio Workspace
-#############################
-.vs/
-
-#############################
-# Logs & Token Files
-#############################
-logs/
-blink_token.json
-save/blink_token.json

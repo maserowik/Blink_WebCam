@@ -1,5 +1,3 @@
-from pickle import FALSE
-
 from flask import Flask, render_template, send_file, jsonify
 from pathlib import Path
 import json
@@ -44,6 +42,7 @@ def get_camera_data():
             config = json.load(f)
 
         cameras = config.get("cameras", [])
+        carousel_images = config.get("carousel_images", 5)  # Get from config
         camera_data = []
 
         for cam_name in cameras:
@@ -51,7 +50,7 @@ def get_camera_data():
             cam_folder = CAMERAS_DIR / normalized_name
             log_file = LOG_FOLDER / f"{normalized_name}.log"
 
-            # Get latest 5 images (sorted by modification time, newest first)
+            # Get latest N images (sorted by modification time, newest first)
             images = []
             if cam_folder.exists():
                 all_images = sorted(
@@ -59,7 +58,7 @@ def get_camera_data():
                     key=lambda x: x.stat().st_mtime,
                     reverse=True
                 )
-                images = [img.name for img in all_images[:5]]
+                images = [img.name for img in all_images[:carousel_images]]
 
             # Get latest log entry
             temp = "N/A"
@@ -103,7 +102,7 @@ def get_camera_data():
             camera_data.append({
                 "name": cam_name,
                 "normalized_name": normalized_name,
-                "images": images,  # Now returning list of 5 images
+                "images": images,
                 "temperature": temp,
                 "battery": battery,
                 "wifi": wifi,
@@ -140,6 +139,26 @@ def get_image(camera_name, image_name):
 
 
 if __name__ == '__main__':
-    print("Starting Blink Camera Web Server...")
-    print("Open your browser to: http://localhost:5000")
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    print("=" * 60)
+    print("🎥 Blink Camera Web Server")
+    print("=" * 60)
+
+    # Try to use Waitress if available
+    try:
+        from waitress import serve
+
+        print("✅ Using Waitress production server")
+        print("🌐 Server running at: http://localhost:5000")
+        print("🌐 Network access: http://0.0.0.0:5000")
+        print("=" * 60)
+        print("Press Ctrl+C to stop the server")
+        print("=" * 60)
+        serve(app, host='0.0.0.0', port=5000, threads=6, channel_timeout=120, backlog=128)
+    except ImportError:
+        print("⚠️  Waitress not found - using Flask development server")
+        print("💡 For production use, install Waitress:")
+        print("   pip install waitress")
+        print("=" * 60)
+        print("🌐 Server running at: http://localhost:5000")
+        print("=" * 60)
+        app.run(host='0.0.0.0', port=5000, debug=False)

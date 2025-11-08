@@ -62,7 +62,7 @@ async def setup_config():
             print("=" * 60)
 
             # Ask user which cameras to monitor
-            print("\n📹 Camera Selection")
+            print("\n🔹 Camera Selection")
             print("-" * 60)
             print("Select cameras to monitor:")
             print("  [A] All cameras (default)")
@@ -120,6 +120,24 @@ async def setup_config():
             days = (max_images * poll_minutes) / (60 * 24)
             print(f"\n📊 This will store approximately {days:.1f} days of history per camera")
 
+            # Get carousel images setting
+            print("\n🎠 Carousel Display")
+            print("-" * 60)
+            print("How many recent images to show in the web carousel?")
+            print("  • 3 images = Minimal")
+            print("  • 5 images = Default (recommended)")
+            print("  • 10 images = Maximum")
+
+            carousel_input = input("\nCarousel images [5]: ").strip()
+            carousel_images = int(carousel_input) if carousel_input else 5
+
+            # Validate carousel_images
+            if carousel_images < 1:
+                carousel_images = 1
+            elif carousel_images > 20:
+                carousel_images = 20
+                print(f"⚠️  Limited to maximum of 20 images")
+
             # Get log retention
             print("\n📝 Log Retention")
             print("-" * 60)
@@ -134,6 +152,7 @@ async def setup_config():
                 "cameras": selected_cameras,
                 "poll_interval": poll_interval,
                 "max_images": max_images,
+                "carousel_images": carousel_images,
                 "log_retention_days": log_retention_days,
                 "max_log_entries": max_log_entries
             }
@@ -145,9 +164,10 @@ async def setup_config():
             print("\n" + "=" * 60)
             print("✅ Configuration saved to blink_config.json")
             print("=" * 60)
-            print(f"📹 Monitoring {len(selected_cameras)} camera(s)")
+            print(f"🔹 Monitoring {len(selected_cameras)} camera(s)")
             print(f"⏱️  Snapshot interval: {poll_minutes} minutes")
             print(f"💾 Max images per camera: {max_images}")
+            print(f"🎠 Carousel images: {carousel_images}")
             print(f"📝 Log retention: {log_retention_days} days")
             print("=" * 60)
             print("\n🚀 Ready to start! Run: python Blink_WebCam.py")
