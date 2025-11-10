@@ -36,13 +36,11 @@ async def start():
                 "sync_module": sync_name,
                 "camera_id": getattr(camera, 'camera_id', None),
                 "name": camera.name,
-                "armed": getattr(camera, 'arm', None),
                 "motion_enabled": getattr(camera, 'motion_enabled', None),
                 "battery": getattr(camera, 'battery', None),
                 "temperature": getattr(camera, 'temperature', None)
             }
             print(f"  📹 {camera_name}")
-            print(f"     - Armed: {getattr(camera, 'arm', 'Unknown')}")
             print(f"     - Motion detection: {getattr(camera, 'motion_enabled', 'Unknown')}")
             if hasattr(camera, 'battery'):
                 print(f"     - Battery: {camera.battery}")

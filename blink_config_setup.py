@@ -51,7 +51,7 @@ async def setup_config():
             camera_list = list(blink.cameras.keys())
 
             if not camera_list:
-                print("⚠ No cameras found on your Blink account!")
+                print("⚠️  No cameras found on your Blink account!")
                 return
 
             print("=" * 60)
@@ -62,7 +62,7 @@ async def setup_config():
             print("=" * 60)
 
             # Ask user which cameras to monitor
-            print("\n🔹 Camera Selection")
+            print("\n📹 Camera Selection")
             print("-" * 60)
             print("Select cameras to monitor:")
             print("  [A] All cameras (default)")
@@ -88,6 +88,23 @@ async def setup_config():
             print(f"\n✅ Selected {len(selected_cameras)} camera(s):")
             for cam in selected_cameras:
                 print(f"  • {cam}")
+
+            # Get location for weather and windy
+            print("\n📍 Location Configuration")
+            print("-" * 60)
+            print("Enter your location for weather and radar display")
+
+            city = input("City: ").strip()
+            while not city:
+                print("❌ City cannot be empty")
+                city = input("City: ").strip()
+
+            state = input("State (2-letter code, e.g., PA): ").strip().upper()
+            while not state or len(state) != 2:
+                print("❌ Please enter a valid 2-letter state code")
+                state = input("State (2-letter code): ").strip().upper()
+
+            print(f"\n✅ Location set to: {city}, {state}")
 
             # Get polling interval
             print("\n⏱️  Polling Interval")
@@ -138,23 +155,16 @@ async def setup_config():
                 carousel_images = 20
                 print(f"⚠️  Limited to maximum of 20 images")
 
-            # Get log retention
-            print("\n📝 Log Retention")
-            print("-" * 60)
-            log_days_input = input("Keep logs for how many days? [5]: ").strip()
-            log_retention_days = int(log_days_input) if log_days_input else 5
-
-            max_log_input = input("Max log entries per camera? [1024]: ").strip()
-            max_log_entries = int(max_log_input) if max_log_input else 1024
-
             # Create configuration
             config = {
                 "cameras": selected_cameras,
                 "poll_interval": poll_interval,
                 "max_images": max_images,
                 "carousel_images": carousel_images,
-                "log_retention_days": log_retention_days,
-                "max_log_entries": max_log_entries
+                "location": {
+                    "city": city,
+                    "state": state
+                }
             }
 
             # Save configuration
@@ -164,11 +174,12 @@ async def setup_config():
             print("\n" + "=" * 60)
             print("✅ Configuration saved to blink_config.json")
             print("=" * 60)
-            print(f"🔹 Monitoring {len(selected_cameras)} camera(s)")
+            print(f"📹 Monitoring {len(selected_cameras)} camera(s)")
+            print(f"📍 Location: {city}, {state}")
             print(f"⏱️  Snapshot interval: {poll_minutes} minutes")
             print(f"💾 Max images per camera: {max_images}")
             print(f"🎠 Carousel images: {carousel_images}")
-            print(f"📝 Log retention: {log_retention_days} days")
+            print(f"📝 Log retention: Daily (resets at midnight)")
             print("=" * 60)
             print("\n🚀 Ready to start! Run: python Blink_WebCam.py")
 

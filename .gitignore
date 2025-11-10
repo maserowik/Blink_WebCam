@@ -5,6 +5,7 @@ cameras/
 tmp/
 .vs/
 .idea/
+Backups/
 
 # OS / Editor files
 .DS_Store
