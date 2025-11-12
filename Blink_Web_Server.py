@@ -35,6 +35,31 @@ def wifi_bars(dbm: int | None) -> int:
         return 0
 
 
+def get_location():
+    """Read location from config file"""
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
+
+        location_data = config.get("location", {})
+        if location_data:
+            return location_data
+        else:
+            # Default location if not configured
+            return {
+                "city": "Bethel Park",
+                "state": "PA",
+                "display": "Bethel Park, PA"
+            }
+    except Exception as e:
+        print(f"Error reading location: {e}")
+        return {
+            "city": "Bethel Park",
+            "state": "PA",
+            "display": "Bethel Park, PA"
+        }
+
+
 def get_camera_data():
     """Read camera configuration and latest data"""
     try:
@@ -119,7 +144,8 @@ def get_camera_data():
 def index():
     """Main page with camera grid"""
     cameras = get_camera_data()
-    return render_template('index.html', cameras=cameras)
+    location = get_location()
+    return render_template('index.html', cameras=cameras, location=location)
 
 
 @app.route('/api/cameras')
@@ -127,6 +153,13 @@ def api_cameras():
     """API endpoint for camera data"""
     cameras = get_camera_data()
     return jsonify(cameras)
+
+
+@app.route('/api/location')
+def api_location():
+    """API endpoint for location data"""
+    location = get_location()
+    return jsonify(location)
 
 
 @app.route('/image/<camera_name>/<image_name>')

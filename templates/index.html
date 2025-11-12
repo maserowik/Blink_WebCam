@@ -274,6 +274,29 @@ h1 {
     box-shadow: 0 5px 15px rgba(0,0,0,0.2);
 }
 
+.windy-widget {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+    padding: clamp(10px, 2vw, 15px) clamp(15px, 3vw, 25px);
+    border-radius: clamp(8px, 1.5vw, 12px);
+    min-width: clamp(180px, 30vw, 250px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.windy-main {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 2vw, 15px);
+    margin-bottom: clamp(5px, 1vw, 10px);
+}
+
+.windy-icon { font-size: clamp(2em, 5vw, 3em); }
+.windy-speed { font-size: clamp(1.5em, 4vw, 2.5em); font-weight: bold; }
+.windy-details { font-size: clamp(0.75em, 1.8vw, 0.9em); opacity: 0.9; }
+.windy-location { font-weight: bold; margin-bottom: 5px; }
+.windy-direction { text-transform: capitalize; }
+.windy-loading { text-align: center; opacity: 0.8; }
+
 .weather-main {
     display: flex;
     align-items: center;
@@ -513,6 +536,11 @@ footer {
         min-width: auto;
     }
 
+    .windy-widget {
+        width: 100%;
+        min-width: auto;
+    }
+
     .camera-grid {
         grid-template-columns: 1fr;
     }
@@ -587,6 +615,9 @@ footer {
         </p>
     </div>
     <div class="header-right">
+        <div class="windy-widget" id="windy-widget">
+            <div class="windy-loading">🌬️ Loading wind...</div>
+        </div>
         <div class="weather-widget" id="weather-widget">
             <div class="weather-loading">Loading weather...</div>
         </div>
@@ -919,11 +950,16 @@ Object.keys(cameras).forEach(cameraName => {
     }
 });
 
-// Weather widget – Bethel Park, PA
+// Weather widget with dynamic location from config
+const WEATHER_LOCATION = "{{ location.display if location else 'Bethel Park, PA' }}";
+const WEATHER_CITY = "{{ location.city if location else 'Bethel Park' }}";
+const WEATHER_STATE = "{{ location.state if location else 'PA' }}";
+
 async function fetchWeather(){
     const widget=document.getElementById('weather-widget');
     try{
-        const resp=await fetch('https://wttr.in/Bethel%20Park,PA?format=j1');
+        const weatherQuery = encodeURIComponent(`${WEATHER_CITY},${WEATHER_STATE}`);
+        const resp=await fetch(`https://wttr.in/${weatherQuery}?format=j1`);
         const data=await resp.json();
         const current=data.current_condition[0];
         const iconMap={'Sunny':'☀️','Clear':'🌙','Partly cloudy':'⛅','Cloudy':'☁️','Overcast':'☁️','Mist':'🌫️','Fog':'🌫️','Light rain':'🌧️','Moderate rain':'🌧️','Heavy rain':'⛈️','Light snow':'🌨️','Heavy snow':'❄️','Thunderstorm':'⛈️'};
@@ -941,7 +977,7 @@ async function fetchWeather(){
                 </div>
             </div>
             <div class="weather-details">
-                <div class="weather-location">Bethel Park, PA</div>
+                <div class="weather-location">${WEATHER_LOCATION}</div>
                 <div class="weather-condition">${condition}</div>
                 <div>Humidity: ${humidity}%</div>
             </div>
@@ -951,8 +987,58 @@ async function fetchWeather(){
         widget.innerHTML=`<div class="weather-loading">Weather unavailable</div>`;
     }
 }
+
+// Windy widget with dynamic location from config
+async function fetchWindy(){
+    const widget=document.getElementById('windy-widget');
+    try{
+        const weatherQuery = encodeURIComponent(`${WEATHER_CITY},${WEATHER_STATE}`);
+        const resp=await fetch(`https://wttr.in/${weatherQuery}?format=j1`);
+        const data=await resp.json();
+        const current=data.current_condition[0];
+
+        const windSpeedMph=current.windspeedMiles;
+        const windDir=current.winddir16Point;
+        const gustMph=current.WindGustMiles || windSpeedMph;
+
+        // Wind direction arrow based on compass direction
+        const directionMap={
+            'N':'↓','NNE':'↙','NE':'↙','ENE':'↙',
+            'E':'←','ESE':'↖','SE':'↖','SSE':'↖',
+            'S':'↑','SSW':'↗','SW':'↗','WSW':'↗',
+            'W':'→','WNW':'↘','NW':'↘','NNW':'↘'
+        };
+        const arrow=directionMap[windDir]||'○';
+
+        // Wind intensity emoji
+        let windIcon='🍃';
+        if(windSpeedMph >= 25) windIcon='💨';
+        if(windSpeedMph >= 40) windIcon='🌪️';
+
+        widget.innerHTML=`
+            <div class="windy-main">
+                <div class="windy-icon">${windIcon}</div>
+                <div>
+                    <div class="windy-speed">${windSpeedMph} mph</div>
+                    <div class="windy-details">Gusts ${gustMph} mph</div>
+                </div>
+            </div>
+            <div class="windy-details">
+                <div class="windy-location">${WEATHER_LOCATION}</div>
+                <div class="windy-direction">${arrow} ${windDir}</div>
+                <div>Wind Direction</div>
+            </div>
+        `;
+    }catch(e){
+        console.error('Windy fetch error:', e);
+        widget.innerHTML=`<div class="windy-loading">Wind data unavailable</div>`;
+    }
+}
+
 fetchWeather();
+fetchWindy();
 setInterval(fetchWeather,600000);
+setInterval(fetchWindy,600000);
 
 // Check for alerts on page load
 checkCameraAlerts();

@@ -89,6 +89,24 @@ async def setup_config():
             for cam in selected_cameras:
                 print(f"  • {cam}")
 
+            # Get user location
+            print("\n📍 Location Settings")
+            print("-" * 60)
+            print("Enter your location for weather display:")
+
+            city = input("City: ").strip()
+            while not city:
+                print("❌ City cannot be empty!")
+                city = input("City: ").strip()
+
+            state = input("State (2-letter code, e.g., PA): ").strip().upper()
+            while not state or len(state) != 2:
+                print("❌ Please enter a valid 2-letter state code!")
+                state = input("State (2-letter code, e.g., PA): ").strip().upper()
+
+            location = f"{city}, {state}"
+            print(f"\n✅ Location set to: {location}")
+
             # Get polling interval
             print("\n⏱️  Polling Interval")
             print("-" * 60)
@@ -143,7 +161,12 @@ async def setup_config():
                 "cameras": selected_cameras,
                 "poll_interval": poll_interval,
                 "max_images": max_images,
-                "carousel_images": carousel_images
+                "carousel_images": carousel_images,
+                "location": {
+                    "city": city,
+                    "state": state,
+                    "display": location
+                }
             }
 
             # Save configuration
@@ -154,6 +177,7 @@ async def setup_config():
             print("✅ Configuration saved to blink_config.json")
             print("=" * 60)
             print(f"📹 Monitoring {len(selected_cameras)} camera(s)")
+            print(f"📍 Location: {location}")
             print(f"⏱️  Snapshot interval: {poll_minutes} minutes")
             print(f"💾 Max images per camera: {max_images}")
             print(f"🎠 Carousel images: {carousel_images}")
