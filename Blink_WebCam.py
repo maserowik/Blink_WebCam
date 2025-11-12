@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import warnings
+from PIL import Image
 
 # Suppress the specific blinkpy warning about last_refresh
 warnings.filterwarnings("ignore", message=".*last_refresh.*")
@@ -59,11 +60,7 @@ else:
             "Tree Front Door",
             "Back Door",
             "Garage Door"
-        ],
-        "location": {
-            "city": "Bethel Park",
-            "state": "PA"
-        }
+        ]
     }
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=4)
@@ -116,13 +113,13 @@ def log_main(msg: str):
 
 
 def log_token(msg: str):
-    """Log token refresh events to dedicated token.log file ONLY"""
+    """Log token refresh events to dedicated token.log file"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp} | {msg}\n"
     with open(TOKEN_LOG_FILE, "a", encoding="utf-8") as f:
         f.write(line)
-    # Print to console but NOT to main log
-    print(line.strip())
+    # Also log to main log
+    log_main(msg)
 
 
 def get_camera_log_file(cam_name: str) -> Path:
@@ -171,6 +168,13 @@ def trim_images(cam_folder: Path):
         log_main(f"Deleted old image: {oldest.name}")
 
 
+async def countdown(seconds: int):
+    for remaining in range(seconds, 0, -1):
+        print(f"\rWaiting {remaining} seconds for next snapshot...", end="")
+        await asyncio.sleep(1)
+    print("\rStarting next snapshot...               ")
+
+
 async def wait_until_next_interval(interval_seconds):
     """Wait until the next aligned interval (0, 5, 10... minutes) with live countdown"""
     now = datetime.now()
@@ -185,29 +189,6 @@ async def wait_until_next_interval(interval_seconds):
         print(f"\rWaiting {remaining} seconds for next snapshot...", end="")
         await asyncio.sleep(1)
     print("\rStarting next snapshot...               ")
-
-
-def check_and_roll_logs():
-    """Roll logs to new day at midnight"""
-    current_date = datetime.now().date()
-
-    # Check all log files
-    for log_file in [MAIN_LOG_FILE, TOKEN_LOG_FILE] + list(LOG_FOLDER.glob("*.log")):
-        if log_file.exists():
-            # Get the date of the last log entry
-            try:
-                with open(log_file, "r", encoding="utf-8") as f:
-                    lines = f.readlines()
-                    if lines:
-                        first_line = lines[0]
-                        ts_str = first_line.split(" | ")[0]
-                        log_date = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S").date()
-
-                        # If log is from a previous day, trim it
-                        if log_date < current_date:
-                            trim_log(log_file)
-            except:
-                pass
 
 
 # ---------------- Snapshot Function ---------------- #
@@ -234,29 +215,47 @@ async def take_snapshot(blink):
         log_file = get_camera_log_file(cam_name)
         bars = wifi_bars(cam.wifi_strength)
 
+        log_main(f"  Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')}")
         log_main(f"  Battery: {getattr(cam, 'battery', 'N/A')}")
         log_main(f"  Temperature: {getattr(cam, 'temperature', 'N/A')}")
 
         image_bytes = None
         source = "None"
 
-        # ---------------- Get media from camera ---------------- #
+        # ---------------- Method 1: Snap a fresh picture ---------------- #
         try:
-            log_main("  Calling get_media() to retrieve image...")
-            response = await cam.get_media()
-            if response.status == 200:
-                image_bytes = await response.read()
-                source = "get_media"
-                log_main(f"  [OK] get_media returned {len(image_bytes)} bytes")
+            log_main("  Method 1: Calling snap_picture() for fresh image...")
+            result = await cam.snap_picture()
+            if isinstance(result, bytes) and len(result) > 1000:
+                image_bytes = result
+                source = "snap_picture"
+                log_main(f"  [OK] snap_picture returned {len(image_bytes)} bytes")
             else:
-                log_main(f"  [FAIL] get_media returned non-200: {response.status}")
+                log_main(f"  [FAIL] snap_picture returned invalid data: {type(result)}")
         except Exception as e:
-            log_main(f"  [FAIL] get_media error: {type(e).__name__}: {e}")
+            log_main(f"  [FAIL] snap_picture error: {type(e).__name__}: {e}")
 
-        # ---------------- Save or log failure ---------------- #
+        # ---------------- Method 2: Use get_media() as fallback ---------------- #
         if not image_bytes:
-            log_main(f"  [FAIL] No image data retrieved for {cam_name}")
-            img_name = f"error_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+            try:
+                log_main("  Method 2: Calling get_media() as fallback...")
+                response = await cam.get_media()
+                if response.status == 200:
+                    image_bytes = await response.read()
+                    source = "get_media"
+                    log_main(f"  [OK] get_media returned {len(image_bytes)} bytes")
+                else:
+                    log_main(f"  [FAIL] get_media returned non-200: {response.status}")
+            except Exception as e:
+                log_main(f"  [FAIL] get_media error: {type(e).__name__}: {e}")
+
+        # ---------------- Method 3: Placeholder if both fail ---------------- #
+        if not image_bytes:
+            img_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_placeholder.jpg"
+            img_path = cam_folder / img_name
+            placeholder = Image.new("RGB", (640, 480), color=(255, 0, 0))
+            placeholder.save(img_path)
+            log_main(f"  [FAIL] No image data, saved placeholder")
         else:
             img_name = f"{normalize_camera_name(cam_name)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
             img_path = cam_folder / img_name
@@ -270,10 +269,11 @@ async def take_snapshot(blink):
 
         trim_images(cam_folder)
 
-        # Log camera info (removed Motion Enabled)
+        # Log camera info (removed Armed status)
         log_entry = (
             f"{timestamp} | Temp: {cam.temperature}°F | Battery: {cam.battery} | "
-            f"WiFi: {bars}/5 | Image: {img_name} | Source: {source}\n"
+            f"WiFi: {bars}/5 | Image: {img_name} | Source: {source} | "
+            f"Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')}\n"
         )
         with open(log_file, "a", encoding="utf-8") as f:
             f.write(log_entry)
@@ -296,7 +296,7 @@ async def poll_blink():
     async with ClientSession() as session:
         blink = Blink(session=session)
 
-        # Extract the region code from the host URL
+        # Extract the region code from the host URL (e.g., "u044" from "https://rest-u044.immedia-semi.com")
         host_url = token_data.get("host", "")
         region_id = host_url.replace("https://rest-", "").replace(".immedia-semi.com", "")
 
@@ -312,7 +312,7 @@ async def poll_blink():
         blink.auth.account_id = token_data.get("account_id")
         blink.auth.user_id = token_data.get("user_id")
 
-        # Initialize the URLs handler with just the region_id
+        # Initialize the URLs handler with just the region_id (e.g., "u044")
         blink.urls = BlinkURLHandler(region_id)
 
         try:
@@ -334,7 +334,6 @@ async def poll_blink():
             return
 
         last_token_mtime = os.path.getmtime(TOKEN_FILE)
-        last_log_check_date = datetime.now().date()
 
         # Startup snapshot
         await take_snapshot(blink)
@@ -342,13 +341,6 @@ async def poll_blink():
 
         while True:
             try:
-                # Check if we need to roll logs (new day)
-                current_date = datetime.now().date()
-                if current_date > last_log_check_date:
-                    log_main("New day detected - rolling logs to new day")
-                    check_and_roll_logs()
-                    last_log_check_date = current_date
-
                 # Check if token was updated
                 current_token_mtime = os.path.getmtime(TOKEN_FILE)
                 if current_token_mtime != last_token_mtime:
@@ -358,13 +350,13 @@ async def poll_blink():
                     with open(TOKEN_FILE, "r") as f:
                         refreshed_token = json.load(f)
 
-                    # Log token refresh with details (ONLY to token.log)
+                    # Log token refresh with details
                     log_token(f"Token refreshed successfully")
                     log_token(f"  New token (first 20 chars): {refreshed_token.get('token', '')[:20]}...")
                     log_token(f"  Account ID: {refreshed_token.get('account_id')}")
                     log_token(f"  Region: {refreshed_token.get('host')}")
 
-                    # Re-initialize camera objects after token refresh
+                    # CRITICAL: Re-initialize camera objects after token refresh
                     log_token(f"  Re-initializing camera objects after token refresh...")
                     try:
                         await blink.setup_post_verify()

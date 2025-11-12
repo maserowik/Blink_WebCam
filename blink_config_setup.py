@@ -16,7 +16,7 @@ async def setup_config():
     # Check if token file exists
     if not Path(TOKEN_FILE).exists():
         print("❌ Error: blink_token.json not found!")
-        print("Please run 'python blink_setup.py' first to authenticate.")
+        print("Please run 'python blink_token.py' first to authenticate.")
         return
 
     # Load token
@@ -89,23 +89,6 @@ async def setup_config():
             for cam in selected_cameras:
                 print(f"  • {cam}")
 
-            # Get location for weather and windy
-            print("\n📍 Location Configuration")
-            print("-" * 60)
-            print("Enter your location for weather and radar display")
-
-            city = input("City: ").strip()
-            while not city:
-                print("❌ City cannot be empty")
-                city = input("City: ").strip()
-
-            state = input("State (2-letter code, e.g., PA): ").strip().upper()
-            while not state or len(state) != 2:
-                print("❌ Please enter a valid 2-letter state code")
-                state = input("State (2-letter code): ").strip().upper()
-
-            print(f"\n✅ Location set to: {city}, {state}")
-
             # Get polling interval
             print("\n⏱️  Polling Interval")
             print("-" * 60)
@@ -160,11 +143,7 @@ async def setup_config():
                 "cameras": selected_cameras,
                 "poll_interval": poll_interval,
                 "max_images": max_images,
-                "carousel_images": carousel_images,
-                "location": {
-                    "city": city,
-                    "state": state
-                }
+                "carousel_images": carousel_images
             }
 
             # Save configuration
@@ -175,7 +154,6 @@ async def setup_config():
             print("✅ Configuration saved to blink_config.json")
             print("=" * 60)
             print(f"📹 Monitoring {len(selected_cameras)} camera(s)")
-            print(f"📍 Location: {city}, {state}")
             print(f"⏱️  Snapshot interval: {poll_minutes} minutes")
             print(f"💾 Max images per camera: {max_images}")
             print(f"🎠 Carousel images: {carousel_images}")

@@ -1,4 +1,4 @@
-d<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -265,23 +265,6 @@ h1 {
     transform: translateX(clamp(25px, 4vw, 30px));
 }
 
-.windy-widget {
-    background: var(--card-bg);
-    padding: 0;
-    border-radius: clamp(8px, 1.5vw, 12px);
-    width: clamp(280px, 40vw, 400px);
-    height: clamp(200px, 30vw, 300px);
-    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    overflow: hidden;
-    transition: background 0.3s ease;
-}
-
-.windy-widget iframe {
-    width: 100%;
-    height: 100%;
-    border: none;
-}
-
 .weather-widget {
     background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
     color: white;
@@ -523,17 +506,11 @@ footer {
     .header-right {
         justify-content: center;
         width: 100%;
-        flex-direction: column;
     }
 
-    .windy-widget,
     .weather-widget {
         width: 100%;
         min-width: auto;
-    }
-
-    .windy-widget {
-        height: 250px;
     }
 
     .camera-grid {
@@ -594,7 +571,7 @@ footer {
 }
 </style>
 </head>
-<body data-theme="light">
+<body>
 
 <!-- Alert Banner -->
 <div class="alert-banner" id="alert-banner"></div>
@@ -610,9 +587,6 @@ footer {
         </p>
     </div>
     <div class="header-right">
-        <div class="windy-widget" id="windy-widget">
-            <iframe id="windy-iframe" frameborder="0" allowfullscreen></iframe>
-        </div>
         <div class="weather-widget" id="weather-widget">
             <div class="weather-loading">Loading weather...</div>
         </div>
@@ -664,11 +638,11 @@ footer {
         </div>
 
         <div class="camera-stats">
-            <div class="stat {% if camera.temperature != 'N/A' %}{% set temp_val = camera.temperature|replace('°F','')|replace('Â','')|replace('Ã‚','')|replace('Ãƒâ€š','')|float(0) %}{% if temp_val >= 113 or temp_val <= -4 %}alert{% endif %}{% endif %}">
+            <div class="stat {% if camera.temperature != 'N/A' %}{% set temp_val = camera.temperature|replace('°F','')|replace('Â','')|replace('Ãƒâ€š','')|float(0) %}{% if temp_val >= 113 or temp_val <= -4 %}alert{% endif %}{% endif %}">
                 <div class="stat-label">Temperature</div>
                 <div class="stat-value">
                     {% if camera.temperature != 'N/A' %}
-                        {% set temp_val = camera.temperature|replace('°F','')|replace('Â','')|replace('Ã‚','')|replace('Ãƒâ€š','')|float(0) %}
+                        {% set temp_val = camera.temperature|replace('°F','')|replace('Â','')|replace('Ãƒâ€š','')|float(0) %}
                         {% if temp_val >= 113 %}🔥 {% elif temp_val <= -4 %}❄️ {% endif %}
                     {% endif %}
                     {{ camera.temperature }}°F
@@ -697,7 +671,7 @@ footer {
 {% else %}
 <div class="no-cameras">
     <h2>No cameras configured</h2>
-    <p>Run `python blink_config_setup.py` to configure your cameras</p>
+    <p>Run `python blink_setup.py` to configure your cameras</p>
 </div>
 {% endif %}
 
@@ -707,23 +681,16 @@ footer {
 </div>
 
 <script>
-// Location data from server
-const LOCATION_CITY = "{{ location.city }}";
-const LOCATION_STATE = "{{ location.state }}";
+// Load saved theme immediately (before page renders)
+(function() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.body.setAttribute('data-theme', savedTheme);
+})();
 
 // Configuration
-const TEMP_HOT_THRESHOLD = 113;
-const TEMP_COLD_THRESHOLD = -4;
-const BATTERY_LOW_THRESHOLD = 20;
-
-// Initialize Windy widget
-function initWindy() {
-    const iframe = document.getElementById('windy-iframe');
-    const windyUrl = `https://embed.windy.com/embed2.html?lat=40.33&lon=-80.03&detailLat=40.33&detailLon=-80.03&width=650&height=450&zoom=9&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1`;
-    iframe.src = windyUrl;
-}
-
-initWindy();
+const TEMP_HOT_THRESHOLD = 113; // °F
+const TEMP_COLD_THRESHOLD = -4; // °F
+const BATTERY_LOW_THRESHOLD = 20; // %
 
 // Alert management
 const alerts = new Map();
@@ -788,6 +755,7 @@ function checkCameraAlerts() {
     camerasData.forEach(camera => {
         const cameraId = camera.normalized_name;
 
+        // Check if offline
         if (!camera.images || camera.images.length === 0) {
             showAlert(
                 `${cameraId}-offline`,
@@ -798,6 +766,7 @@ function checkCameraAlerts() {
             );
         }
 
+        // Check temperature
         const temp = parseTemperature(camera.temperature);
         if (temp !== null) {
             if (temp >= TEMP_HOT_THRESHOLD) {
@@ -819,6 +788,7 @@ function checkCameraAlerts() {
             }
         }
 
+        // Check battery
         const battery = parseBattery(camera.battery);
         if (battery !== null && battery <= BATTERY_LOW_THRESHOLD) {
             showAlert(
@@ -833,18 +803,21 @@ function checkCameraAlerts() {
     {% endif %}
 }
 
+// Dark mode toggle
 function toggleTheme() {
     const body = document.body;
     const currentTheme = body.getAttribute('data-theme');
     const newTheme = currentTheme === 'light' ? 'dark' : 'light';
     body.setAttribute('data-theme', newTheme);
     document.getElementById('theme-icon').textContent = newTheme === 'light' ? '☀️' : '🌙';
+    localStorage.setItem('theme', newTheme);
 }
 
-const savedTheme = 'light';
-document.body.setAttribute('data-theme', savedTheme);
+// Update theme icon after DOM loads
+const savedTheme = localStorage.getItem('theme') || 'light';
 document.getElementById('theme-icon').textContent = savedTheme === 'light' ? '☀️' : '🌙';
 
+// Current time
 function updateTime(){
     const now=new Date();
     document.getElementById('current-time').textContent=now.toLocaleString('en-US',{
@@ -855,6 +828,7 @@ function updateTime(){
 updateTime();
 setInterval(updateTime,1000);
 
+// Check battery levels and apply styling with JavaScript
 function checkBatteryLevels() {
     document.querySelectorAll('[data-battery]').forEach(statDiv => {
         const batteryStr = statDiv.getAttribute('data-battery');
@@ -870,8 +844,10 @@ function checkBatteryLevels() {
     });
 }
 
+// Run battery check after page loads
 checkBatteryLevels();
 
+// Cameras & carousel
 const cameras={};
 document.querySelectorAll('.camera-image').forEach(img=>{
     const cam=img.dataset.camera;
@@ -896,6 +872,7 @@ function switchImage(cameraName,index){
     }
 }
 
+// Auto-cycle
 setInterval(()=>{
     Object.keys(cameras).forEach(cameraName=>{
         const cam=cameras[cameraName];
@@ -906,6 +883,7 @@ setInterval(()=>{
     });
 },3000);
 
+// Nav dots click
 document.querySelectorAll('.nav-dot').forEach(dot=>{
     dot.addEventListener('click',e=>{
         const cam=e.target.dataset.camera;
@@ -914,6 +892,7 @@ document.querySelectorAll('.nav-dot').forEach(dot=>{
     });
 });
 
+// Timestamp function
 function updateImageTimestamp(cameraName,filename){
     const el=document.getElementById(`timestamp-${cameraName}`);
     if(!el)return;
@@ -930,6 +909,7 @@ function updateImageTimestamp(cameraName,filename){
     } else { el.textContent='Unknown time'; }
 }
 
+// Initialize first image timestamps
 Object.keys(cameras).forEach(cameraName => {
     const cam = cameras[cameraName];
     if (cam.images.length > 0) {
@@ -939,11 +919,11 @@ Object.keys(cameras).forEach(cameraName => {
     }
 });
 
+// Weather widget – Bethel Park, PA
 async function fetchWeather(){
     const widget=document.getElementById('weather-widget');
     try{
-        const location = `${LOCATION_CITY},${LOCATION_STATE}`;
-        const resp=await fetch(`https://wttr.in/${encodeURIComponent(location)}?format=j1`);
+        const resp=await fetch('https://wttr.in/Bethel%20Park,PA?format=j1');
         const data=await resp.json();
         const current=data.current_condition[0];
         const iconMap={'Sunny':'☀️','Clear':'🌙','Partly cloudy':'⛅','Cloudy':'☁️','Overcast':'☁️','Mist':'🌫️','Fog':'🌫️','Light rain':'🌧️','Moderate rain':'🌧️','Heavy rain':'⛈️','Light snow':'🌨️','Heavy snow':'❄️','Thunderstorm':'⛈️'};
@@ -961,7 +941,7 @@ async function fetchWeather(){
                 </div>
             </div>
             <div class="weather-details">
-                <div class="weather-location">${LOCATION_CITY}, ${LOCATION_STATE}</div>
+                <div class="weather-location">Bethel Park, PA</div>
                 <div class="weather-condition">${condition}</div>
                 <div>Humidity: ${humidity}%</div>
             </div>
@@ -974,8 +954,10 @@ async function fetchWeather(){
 fetchWeather();
 setInterval(fetchWeather,600000);
 
+// Check for alerts on page load
 checkCameraAlerts();
 
+// Refresh page every 5 min
 setInterval(()=>{location.reload();},300000);
 </script>
 </body>
