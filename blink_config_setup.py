@@ -107,6 +107,25 @@ async def setup_config():
             location = f"{city}, {state}"
             print(f"\n✅ Location set to: {location}")
 
+            # 🔥 ADDITION: Geo-coordinate lookup (only modification)
+            print("\n🌐 Looking up coordinates for radar map...")
+
+            geocode_url = (
+                f"https://nominatim.openstreetmap.org/search?"
+                f"city={city}&state={state}&country=USA&format=json"
+            )
+
+            async with session.get(geocode_url, headers={"User-Agent": "BlinkRadar/1.0"}) as resp:
+                data = await resp.json()
+
+            if not data:
+                print("⚠️ Could not determine GPS coordinates, using 0,0")
+                lat, lon = 0.0, 0.0
+            else:
+                lat = float(data[0]["lat"])
+                lon = float(data[0]["lon"])
+                print(f"📍 Coordinates found → LAT: {lat}, LON: {lon}")
+
             # Get polling interval
             print("\n⏱️  Polling Interval")
             print("-" * 60)
@@ -149,14 +168,13 @@ async def setup_config():
             carousel_input = input("\nCarousel images [5]: ").strip()
             carousel_images = int(carousel_input) if carousel_input else 5
 
-            # Validate carousel_images
             if carousel_images < 1:
                 carousel_images = 1
             elif carousel_images > 20:
                 carousel_images = 20
                 print(f"⚠️  Limited to maximum of 20 images")
 
-            # Create configuration
+            # Create configuration (updated only here)
             config = {
                 "cameras": selected_cameras,
                 "poll_interval": poll_interval,
@@ -165,7 +183,9 @@ async def setup_config():
                 "location": {
                     "city": city,
                     "state": state,
-                    "display": location
+                    "display": location,
+                    "lat": lat,
+                    "lon": lon
                 }
             }
 
@@ -178,10 +198,10 @@ async def setup_config():
             print("=" * 60)
             print(f"📹 Monitoring {len(selected_cameras)} camera(s)")
             print(f"📍 Location: {location}")
+            print(f"🌐 Coordinates: {lat}, {lon}")
             print(f"⏱️  Snapshot interval: {poll_minutes} minutes")
             print(f"💾 Max images per camera: {max_images}")
             print(f"🎠 Carousel images: {carousel_images}")
-            print(f"📝 Log retention: Daily (resets at midnight)")
             print("=" * 60)
             print("\n🚀 Ready to start! Run: python Blink_WebCam.py")
 

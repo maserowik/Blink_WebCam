@@ -1,6 +1,7 @@
 from flask import Flask, render_template, send_file, jsonify
 from pathlib import Path
 import json
+import socket
 from datetime import datetime
 
 app = Flask(__name__)
@@ -10,6 +11,20 @@ CONFIG_FILE = "blink_config.json"
 ROOT_DIR = Path(".")
 CAMERAS_DIR = ROOT_DIR / "cameras"
 LOG_FOLDER = ROOT_DIR / "logs"
+
+
+def get_local_ip():
+    """Get the local IP address of this machine"""
+    try:
+        # Create a socket connection to determine local IP
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Doesn't actually connect, just determines the route
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except Exception:
+        return "127.0.0.1"
 
 
 def normalize_camera_name(cam_name: str) -> str:
@@ -176,13 +191,16 @@ if __name__ == '__main__':
     print("🎥 Blink Camera Web Server")
     print("=" * 60)
 
+    # Get local IP address
+    local_ip = get_local_ip()
+
     # Try to use Waitress if available
     try:
         from waitress import serve
 
         print("✅ Using Waitress production server")
-        print("🌐 Server running at: http://localhost:5000")
-        print("🌐 Network access: http://0.0.0.0:5000")
+        print(f"🌐 Local access:   http://localhost:5000")
+        print(f"🌐 Network access: http://{local_ip}:5000")
         print("=" * 60)
         print("Press Ctrl+C to stop the server")
         print("=" * 60)
@@ -192,6 +210,7 @@ if __name__ == '__main__':
         print("💡 For production use, install Waitress:")
         print("   pip install waitress")
         print("=" * 60)
-        print("🌐 Server running at: http://localhost:5000")
+        print(f"🌐 Local access:   http://localhost:5000")
+        print(f"🌐 Network access: http://{local_ip}:5000")
         print("=" * 60)
         app.run(host='0.0.0.0', port=5000, debug=False)

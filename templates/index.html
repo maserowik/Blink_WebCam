@@ -275,12 +275,23 @@ h1 {
 }
 
 .windy-widget {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-    color: white;
-    padding: clamp(10px, 2vw, 15px) clamp(15px, 3vw, 25px);
+    background: var(--card-bg);
+    color: var(--card-text);
+    padding: 0;
     border-radius: clamp(8px, 1.5vw, 12px);
     min-width: clamp(180px, 30vw, 250px);
+    height: auto;
     box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    overflow: hidden;
+    position: relative;
+    transition: background 0.3s ease, color 0.3s ease;
+}
+
+.windy-widget iframe {
+    width: 100%;
+    height: 200px;
+    border: none;
+    display: block;
 }
 
 .windy-main {
@@ -453,6 +464,10 @@ h1 {
     animation: pulse 2s infinite;
 }
 
+.stat.alert .stat-value {
+    animation: pulse 2s infinite;
+}
+
 .stat-label {
     font-size: clamp(0.65em, 1.5vw, 0.8em);
     color: var(--card-subtext);
@@ -616,7 +631,9 @@ footer {
     </div>
     <div class="header-right">
         <div class="windy-widget" id="windy-widget">
-            <div class="windy-loading">🌬️ Loading wind...</div>
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--card-text);padding:20px;text-align:center;">
+                🌐 Loading radar map...
+            </div>
         </div>
         <div class="weather-widget" id="weather-widget">
             <div class="weather-loading">Loading weather...</div>
@@ -669,17 +686,13 @@ footer {
         </div>
 
         <div class="camera-stats">
-            <div class="stat {% if camera.temperature != 'N/A' %}{% set temp_val = camera.temperature|replace('°F','')|replace('Â','')|replace('Ãƒâ€š','')|float(0) %}{% if temp_val >= 113 or temp_val <= -4 %}alert{% endif %}{% endif %}">
+            <div class="stat" data-temperature="{{ camera.temperature }}" data-camera="{{ camera.normalized_name }}">
                 <div class="stat-label">Temperature</div>
-                <div class="stat-value">
-                    {% if camera.temperature != 'N/A' %}
-                        {% set temp_val = camera.temperature|replace('°F','')|replace('Â','')|replace('Ãƒâ€š','')|float(0) %}
-                        {% if temp_val >= 113 %}🔥 {% elif temp_val <= -4 %}❄️ {% endif %}
-                    {% endif %}
-                    {{ camera.temperature }}°F
+                <div class="stat-value" id="temp-{{ camera.normalized_name }}">
+                    {{ camera.temperature }}
                 </div>
             </div>
-            <div class="stat" data-battery="{{ camera.battery }}">
+            <div class="stat" data-battery="{{ camera.battery }}" data-camera="{{ camera.normalized_name }}">
                 <div class="stat-label">Battery</div>
                 <div class="stat-value" id="battery-{{ camera.normalized_name }}">
                     {{ camera.battery }}
@@ -774,64 +787,20 @@ function parseTemperature(tempStr) {
 }
 
 function parseBattery(batteryStr) {
-    if (!batteryStr || batteryStr === 'N/A' || batteryStr === 'okay') return null;
+    if (!batteryStr || batteryStr === 'N/A') return null;
+
+    // Handle text statuses
+    batteryStr = batteryStr.toLowerCase().trim();
+    if (batteryStr === 'low') return 10; // Treat "low" as 10%
+    if (batteryStr === 'ok' || batteryStr === 'okay') return 100; // Treat "ok" as 100%
+
+    // Handle numeric percentages
     const match = batteryStr.match(/(\d+)/);
     return match ? parseInt(match[1]) : null;
 }
 
 function checkCameraAlerts() {
-    {% if cameras %}
-    const camerasData = {{ cameras|tojson }};
-
-    camerasData.forEach(camera => {
-        const cameraId = camera.normalized_name;
-
-        // Check if offline
-        if (!camera.images || camera.images.length === 0) {
-            showAlert(
-                `${cameraId}-offline`,
-                'critical',
-                '⚠️',
-                `${camera.name} Offline`,
-                `Camera is not responding - check power and connection`
-            );
-        }
-
-        // Check temperature
-        const temp = parseTemperature(camera.temperature);
-        if (temp !== null) {
-            if (temp >= TEMP_HOT_THRESHOLD) {
-                showAlert(
-                    `${cameraId}-hot`,
-                    'warning',
-                    '🔥',
-                    `${camera.name} High Temperature`,
-                    `Temperature is ${temp}°F - camera may be too hot`
-                );
-            } else if (temp <= TEMP_COLD_THRESHOLD) {
-                showAlert(
-                    `${cameraId}-cold`,
-                    'info',
-                    '❄️',
-                    `${camera.name} Low Temperature`,
-                    `Temperature is ${temp}°F - camera may be affected by cold`
-                );
-            }
-        }
-
-        // Check battery
-        const battery = parseBattery(camera.battery);
-        if (battery !== null && battery <= BATTERY_LOW_THRESHOLD) {
-            showAlert(
-                `${cameraId}-battery`,
-                'warning',
-                '🔋',
-                `${camera.name} Low Battery`,
-                `Battery at ${battery}% - please recharge soon`
-            );
-        }
-    });
-    {% endif %}
+    // Alert checking disabled - only show visual indicators on camera cards
 }
 
 // Dark mode toggle
@@ -861,22 +830,72 @@ setInterval(updateTime,1000);
 
 // Check battery levels and apply styling with JavaScript
 function checkBatteryLevels() {
+    console.log('Checking battery levels...');
     document.querySelectorAll('[data-battery]').forEach(statDiv => {
         const batteryStr = statDiv.getAttribute('data-battery');
+        const cameraName = statDiv.getAttribute('data-camera');
+        console.log(`Camera ${cameraName}: Battery string = "${batteryStr}"`);
+
         const battery = parseBattery(batteryStr);
+        console.log(`Camera ${cameraName}: Parsed battery = ${battery}`);
 
         if (battery !== null && battery <= BATTERY_LOW_THRESHOLD) {
+            console.log(`Camera ${cameraName}: LOW BATTERY - Adding critical class`);
             statDiv.classList.add('critical');
             const valueDiv = statDiv.querySelector('.stat-value');
-            if (valueDiv && !valueDiv.textContent.includes('⚠️')) {
-                valueDiv.textContent = '⚠️ ' + valueDiv.textContent;
+            if (valueDiv) {
+                const currentText = valueDiv.textContent.trim();
+                console.log(`Camera ${cameraName}: Current text = "${currentText}"`);
+                if (!currentText.includes('⚠️')) {
+                    valueDiv.textContent = '⚠️ ' + currentText;
+                    console.log(`Camera ${cameraName}: Updated to "${valueDiv.textContent}"`);
+                }
             }
         }
     });
 }
 
-// Run battery check after page loads
+// Check temperature levels and apply styling with JavaScript
+function checkTemperatureLevels() {
+    console.log('Checking temperature levels...');
+    document.querySelectorAll('[data-temperature]').forEach(statDiv => {
+        const tempStr = statDiv.getAttribute('data-temperature');
+        const cameraName = statDiv.getAttribute('data-camera');
+        console.log(`Camera ${cameraName}: Temp string = "${tempStr}"`);
+
+        const temp = parseTemperature(tempStr);
+        console.log(`Camera ${cameraName}: Parsed temp = ${temp}`);
+
+        if (temp !== null) {
+            const valueDiv = statDiv.querySelector('.stat-value');
+            if (temp >= TEMP_HOT_THRESHOLD) {
+                console.log(`Camera ${cameraName}: HOT TEMP - Adding alert class`);
+                statDiv.classList.add('alert');
+                if (valueDiv) {
+                    const currentText = valueDiv.textContent.trim();
+                    if (!currentText.includes('🔥')) {
+                        valueDiv.textContent = '🔥 ' + currentText;
+                        console.log(`Camera ${cameraName}: Updated to "${valueDiv.textContent}"`);
+                    }
+                }
+            } else if (temp <= TEMP_COLD_THRESHOLD) {
+                console.log(`Camera ${cameraName}: COLD TEMP - Adding alert class`);
+                statDiv.classList.add('alert');
+                if (valueDiv) {
+                    const currentText = valueDiv.textContent.trim();
+                    if (!currentText.includes('❄️')) {
+                        valueDiv.textContent = '❄️ ' + currentText;
+                        console.log(`Camera ${cameraName}: Updated to "${valueDiv.textContent}"`);
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Run checks after page loads
 checkBatteryLevels();
+checkTemperatureLevels();
 
 // Cameras & carousel
 const cameras={};
@@ -954,6 +973,8 @@ Object.keys(cameras).forEach(cameraName => {
 const WEATHER_LOCATION = "{{ location.display if location else 'Bethel Park, PA' }}";
 const WEATHER_CITY = "{{ location.city if location else 'Bethel Park' }}";
 const WEATHER_STATE = "{{ location.state if location else 'PA' }}";
+const WEATHER_LAT = {{ location.lat if location else 40.3267 }};
+const WEATHER_LON = {{ location.lon if location else -80.0171 }};
 
 async function fetchWeather(){
     const widget=document.getElementById('weather-widget');
@@ -988,57 +1009,19 @@ async function fetchWeather(){
     }
 }
 
-// Windy widget with dynamic location from config
-async function fetchWindy(){
+// Windy radar widget with dynamic location from config
+function loadWindyRadar(){
     const widget=document.getElementById('windy-widget');
-    try{
-        const weatherQuery = encodeURIComponent(`${WEATHER_CITY},${WEATHER_STATE}`);
-        const resp=await fetch(`https://wttr.in/${weatherQuery}?format=j1`);
-        const data=await resp.json();
-        const current=data.current_condition[0];
 
-        const windSpeedMph=current.windspeedMiles;
-        const windDir=current.winddir16Point;
-        const gustMph=current.WindGustMiles || windSpeedMph;
+    // Create Windy embed URL with coordinates from config
+    const windyUrl = `https://embed.windy.com/embed2.html?lat=${WEATHER_LAT}&lon=${WEATHER_LON}&detailLat=${WEATHER_LAT}&detailLon=${WEATHER_LON}&width=650&height=450&zoom=8&level=surface&overlay=radar&product=ecmwf&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1`;
 
-        // Wind direction arrow based on compass direction
-        const directionMap={
-            'N':'↓','NNE':'↙','NE':'↙','ENE':'↙',
-            'E':'←','ESE':'↖','SE':'↖','SSE':'↖',
-            'S':'↑','SSW':'↗','SW':'↗','WSW':'↗',
-            'W':'→','WNW':'↘','NW':'↘','NNW':'↘'
-        };
-        const arrow=directionMap[windDir]||'○';
-
-        // Wind intensity emoji
-        let windIcon='🍃';
-        if(windSpeedMph >= 25) windIcon='💨';
-        if(windSpeedMph >= 40) windIcon='🌪️';
-
-        widget.innerHTML=`
-            <div class="windy-main">
-                <div class="windy-icon">${windIcon}</div>
-                <div>
-                    <div class="windy-speed">${windSpeedMph} mph</div>
-                    <div class="windy-details">Gusts ${gustMph} mph</div>
-                </div>
-            </div>
-            <div class="windy-details">
-                <div class="windy-location">${WEATHER_LOCATION}</div>
-                <div class="windy-direction">${arrow} ${windDir}</div>
-                <div>Wind Direction</div>
-            </div>
-        `;
-    }catch(e){
-        console.error('Windy fetch error:', e);
-        widget.innerHTML=`<div class="windy-loading">Wind data unavailable</div>`;
-    }
+    widget.innerHTML = `<iframe src="${windyUrl}" frameborder="0"></iframe>`;
 }
 
+loadWindyRadar();
 fetchWeather();
-fetchWindy();
 setInterval(fetchWeather,600000);
-setInterval(fetchWindy,600000);
 
 // Check for alerts on page load
 checkCameraAlerts();
