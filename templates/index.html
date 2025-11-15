@@ -1026,8 +1026,15 @@ setInterval(fetchWeather,600000);
 // Check for alerts on page load
 checkCameraAlerts();
 
-// Refresh page every 5 min
-setInterval(()=>{location.reload();},300000);
+// Refresh page every 5 min with smooth transition
+setInterval(()=>{
+    // Fade out slightly before reload for smoother transition
+    document.body.style.transition = 'opacity 0.3s';
+    document.body.style.opacity = '0.8';
+    setTimeout(() => {
+        location.reload();
+    }, 300);
+}, 300000);
 </script>
 </body>
 </html>
