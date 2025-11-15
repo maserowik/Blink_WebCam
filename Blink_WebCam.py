@@ -11,6 +11,9 @@ import sys
 import warnings
 from PIL import Image
 
+# Import the new log rotation module
+from log_rotation import LogRotator
+
 # Suppress the specific blinkpy warning about last_refresh
 warnings.filterwarnings("ignore", message=".*last_refresh.*")
 
@@ -77,8 +80,14 @@ LOG_FOLDER = ROOT_DIR / "logs"
 CAMERAS_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FOLDER.mkdir(parents=True, exist_ok=True)
 
-MAIN_LOG_FILE = LOG_FOLDER / "main.log"
-TOKEN_LOG_FILE = LOG_FOLDER / "token.log"
+# Initialize log rotator (keeps 5 days of history)
+log_rotator = LogRotator(LOG_FOLDER, max_backups=5)
+
+# Define log file paths in organized folders
+MAIN_LOG_FOLDER = log_rotator.get_system_log_folder("main")
+TOKEN_LOG_FOLDER = log_rotator.get_system_log_folder("token")
+MAIN_LOG_FILE = MAIN_LOG_FOLDER / "main.log"
+TOKEN_LOG_FILE = TOKEN_LOG_FOLDER / "token.log"
 
 
 # ---------------- Utility Functions ---------------- #
@@ -105,6 +114,9 @@ def wifi_bars(dbm: int | None) -> int:
 
 
 def log_main(msg: str):
+    """Log to system/main/main.log with automatic rotation check"""
+    log_rotator.check_and_rotate_if_needed()
+
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp} | {msg}\n"
     with open(MAIN_LOG_FILE, "a", encoding="utf-8") as f:
@@ -113,7 +125,9 @@ def log_main(msg: str):
 
 
 def log_token(msg: str):
-    """Log token refresh events to dedicated token.log file"""
+    """Log token refresh events to system/token/token.log file"""
+    log_rotator.check_and_rotate_if_needed()
+
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp} | {msg}\n"
     with open(TOKEN_LOG_FILE, "a", encoding="utf-8") as f:
@@ -123,34 +137,21 @@ def log_token(msg: str):
 
 
 def get_camera_log_file(cam_name: str) -> Path:
+    """Get the log file path for a camera in its own folder"""
     normalized_name = normalize_camera_name(cam_name)
-    return LOG_FOLDER / f"{normalized_name}.log"
+    camera_log_folder = log_rotator.get_camera_log_folder(normalized_name)
+    return camera_log_folder / f"{normalized_name}.log"
 
 
-def trim_log(log_file: Path):
-    """Keep only log entries from today (current calendar day)"""
-    if not log_file.exists():
-        return
+def log_camera(cam_name: str, msg: str):
+    """Log to cameras/{camera-name}/{camera-name}.log file with automatic rotation check"""
+    log_rotator.check_and_rotate_if_needed()
 
-    with open(log_file, "r", encoding="utf-8") as f:
-        lines = f.readlines()
-
-    # Get today's date at midnight
-    today_midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-
-    filtered_lines = []
-    for line in lines:
-        try:
-            ts_str = line.split(" | ")[0]
-            ts = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
-            # Keep only entries from today or later
-            if ts >= today_midnight:
-                filtered_lines.append(line)
-        except:
-            continue
-
-    with open(log_file, "w", encoding="utf-8") as f:
-        f.writelines(filtered_lines)
+    log_file = get_camera_log_file(cam_name)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"{timestamp} | {msg}\n"
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(line)
 
 
 def ensure_camera_folder(cam_name: str) -> Path:
@@ -212,7 +213,6 @@ async def take_snapshot(blink):
         log_main(f"{'=' * 60}")
 
         cam_folder = ensure_camera_folder(cam_name)
-        log_file = get_camera_log_file(cam_name)
         bars = wifi_bars(cam.wifi_strength)
 
         log_main(f"  Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')}")
@@ -269,15 +269,13 @@ async def take_snapshot(blink):
 
         trim_images(cam_folder)
 
-        # Log camera info (removed Armed status)
+        # Log camera info to camera-specific log
         log_entry = (
-            f"{timestamp} | Temp: {cam.temperature}°F | Battery: {cam.battery} | "
+            f"Temp: {cam.temperature}°F | Battery: {cam.battery} | "
             f"WiFi: {bars}/5 | Image: {img_name} | Source: {source} | "
-            f"Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')}\n"
+            f"Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')}"
         )
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(log_entry)
-        trim_log(log_file)
+        log_camera(cam_name, log_entry)
 
         print(f"\n--- {cam_name} ---")
         print(f"Temperature: {cam.temperature}°F")
@@ -335,6 +333,9 @@ async def poll_blink():
 
         last_token_mtime = os.path.getmtime(TOKEN_FILE)
 
+        # Start log rotation monitoring thread
+        log_rotator.start_midnight_rotation_thread()
+
         # Startup snapshot
         await take_snapshot(blink)
         await wait_until_next_interval(POLL_INTERVAL)
@@ -383,4 +384,7 @@ if __name__ == "__main__":
     CAMERAS_DIR.mkdir(parents=True, exist_ok=True)
     LOG_FOLDER.mkdir(parents=True, exist_ok=True)
     log_main("Blink WebCam script started.")
+    log_main(f"Log rotation enabled: keeps 5 days of history")
+    log_main(f"Main log: {MAIN_LOG_FILE}")
+    log_main(f"Token log: {TOKEN_LOG_FILE}")
     asyncio.run(poll_blink())
