@@ -88,7 +88,10 @@ def get_camera_data():
         for cam_name in cameras:
             normalized_name = normalize_camera_name(cam_name)
             cam_folder = CAMERAS_DIR / normalized_name
-            log_file = LOG_FOLDER / f"{normalized_name}.log"
+
+            # NEW: Updated log file path to match new structure
+            # logs/cameras/{camera-name}/{camera-name}.log
+            log_file = LOG_FOLDER / "cameras" / normalized_name / f"{normalized_name}.log"
 
             # Get latest N images (sorted by modification time, newest first)
             images = []
@@ -137,7 +140,10 @@ def get_camera_data():
                                             wifi = 0
                 except Exception as e:
                     print(f"Error parsing log for {cam_name}: {e}")
+                    print(f"  Looking for log at: {log_file}")
                     pass
+            else:
+                print(f"Warning: Log file not found for {cam_name} at {log_file}")
 
             camera_data.append({
                 "name": cam_name,
@@ -152,6 +158,8 @@ def get_camera_data():
         return camera_data
     except Exception as e:
         print(f"Error reading camera data: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 
