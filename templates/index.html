@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>&#x1F3A5; Blink Camera Monitor</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+    --bg-gradient-start: #667eea;
+    --bg-gradient-end: #764ba2;
+    --card-bg: white;
+    --card-text: #333;
+    --card-subtext: #666;
+    --stat-bg: #f8f9fa;
+    --stat-text: #333;
+    --header-bg: rgba(255,255,255,0.95);
+    --header-text: #333;
+    --subtitle-text: #666;
+    --timestamp-text: #888;
+    --alert-critical: #e53e3e;
+    --alert-warning: #ed8936;
+    --alert-info: #4299e1;
+    --armed-color: #48bb78;
+    --disarmed-color: #f56565;
+}
+
+[data-theme="dark"] {
+    --bg-gradient-start: #1a1a2e;
+    --bg-gradient-end: #16213e;
+    --card-bg: #2d3748;
+    --card-text: #e2e8f0;
+    --card-subtext: #a0aec0;
+    --stat-bg: #1a202c;
+    --stat-text: #e2e8f0;
+    --header-bg: rgba(45, 55, 72, 0.95);
+    --header-text: #e2e8f0;
+    --subtitle-text: #a0aec0;
+    --timestamp-text: #cbd5e0;
+}
+
+html {
+    height: 100%;
+    width: 100%;
+}
+
+body {
+    min-height: 100vh;
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+    background-attachment: fixed;
+    transition: background 0.3s ease;
+}
+
+.container {
+    width: 100%;
+    padding: clamp(8px, 2vw, 20px);
+    box-sizing: border-box;
+}
+
+/* Alert Banner */
+.alert-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: none;
+    flex-direction: column;
+    gap: 0;
+    max-height: 50vh;
+    overflow-y: auto;
+}
+
+.alert-banner.show {
+    display: flex;
+}
+
+.alert-item {
+    padding: 15px 20px;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 15px;
+    animation: slideDown 0.3s ease-out;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+}
+
+.alert-item.critical {
+    background: var(--alert-critical);
+}
+
+.alert-item.warning {
+    background: var(--alert-warning);
+}
+
+.alert-item.info {
+    background: var(--alert-info);
+}
+
+.alert-content {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.alert-icon {
+    font-size: 1.5em;
+    animation: alertPulse 2s infinite;
+}
+
+.alert-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.alert-title {
+    font-weight: bold;
+    font-size: 1.1em;
+}
+
+.alert-message {
+    font-size: 0.9em;
+    opacity: 0.95;
+}
+
+.alert-close {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: white;
+    font-size: 1.2em;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 4px;
+    transition: background 0.2s;
+}
+
+.alert-close:hover {
+    background: rgba(255,255,255,0.3);
+}
+
+@keyframes slideDown {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes alertPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+body.has-alerts .container {
+    margin-top: 0;
+}
+
+header {
+    background: var(--header-bg);
+    padding: clamp(12px, 2vw, 20px) clamp(15px, 3vw, 30px);
+    border-radius: clamp(8px, 1.5vw, 15px);
+    margin-bottom: clamp(15px, 3vw, 30px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: clamp(10px, 2vw, 20px);
+    transition: background 0.3s ease;
+}
+
+.header-left {
+    flex: 1;
+    min-width: 200px;
+}
+
+h1 {
+    color: var(--header-text);
+    font-size: clamp(1.2em, 4vw, 2em);
+    margin-bottom: clamp(2px, 0.5vw, 5px);
+    transition: color 0.3s ease;
+}
+
+.subtitle {
+    color: var(--subtitle-text);
+    font-size: clamp(0.75em, 2vw, 1em);
+    transition: color 0.3s ease;
+}
+
+.timestamp {
+    color: var(--timestamp-text);
+    font-size: clamp(0.7em, 1.8vw, 0.9em);
+    margin-top: clamp(5px, 1vw, 10px);
+    transition: color 0.3s ease;
+}
+
+.status-indicator {
+    display: inline-block;
+    width: clamp(8px, 1vw, 10px);
+    height: clamp(8px, 1vw, 10px);
+    border-radius: 50%;
+    background: #4CAF50;
+    animation: pulse 2s infinite;
+    margin-right: 5px;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+    gap: clamp(10px, 2vw, 15px);
+    flex-wrap: wrap;
+}
+
+/* Arm/Disarm Toggle */
+.arm-toggle {
+    position: relative;
+    width: clamp(80px, 12vw, 100px);
+    height: clamp(35px, 5vw, 40px);
+    border-radius: 30px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    background: var(--disarmed-color);
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+}
+
+.arm-toggle.armed {
+    background: var(--armed-color);
+}
+
+.arm-toggle.loading {
+    opacity: 0.6;
+    cursor: not-allowed;
+    animation: pulse 1s infinite;
+}
+
+.arm-toggle-slider {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: clamp(29px, 4.2vw, 34px);
+    height: clamp(29px, 4.2vw, 34px);
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(14px, 2.2vw, 18px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.arm-toggle.armed .arm-toggle-slider {
+    transform: translateX(clamp(45px, 7vw, 60px));
+}
+
+.arm-toggle-label {
+    position: absolute;
+    font-size: clamp(10px, 1.8vw, 12px);
+    font-weight: bold;
+    color: white;
+    text-transform: uppercase;
+    transition: opacity 0.3s ease;
+}
+
+.arm-toggle-label.disarmed-label {
+    right: 8px;
+    opacity: 1;
+}
+
+.arm-toggle-label.armed-label {
+    left: 8px;
+    opacity: 0;
+}
+
+.arm-toggle.armed .arm-toggle-label.disarmed-label {
+    opacity: 0;
+}
+
+.arm-toggle.armed .arm-toggle-label.armed-label {
+    opacity: 1;
+}
+
+/* Theme Toggle */
+.theme-toggle {
+    position: relative;
+    width: clamp(50px, 8vw, 60px);
+    height: clamp(25px, 4vw, 30px);
+    background: rgba(128, 128, 128, 0.3);
+    border-radius: 30px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    flex-shrink: 0;
+}
+
+.theme-toggle:hover {
+    background: rgba(128, 128, 128, 0.4);
+}
+
+.theme-toggle-slider {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: clamp(19px, 3.2vw, 24px);
+    height: clamp(19px, 3.2vw, 24px);
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(10px, 2vw, 14px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+[data-theme="dark"] .theme-toggle {
+    background: rgba(100, 100, 200, 0.3);
+}
+
+[data-theme="dark"] .theme-toggle-slider {
+    transform: translateX(clamp(25px, 4vw, 30px));
+}
+
+.weather-widget {
+    background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+    color: white;
+    padding: clamp(10px, 2vw, 15px) clamp(15px, 3vw, 25px);
+    border-radius: clamp(8px, 1.5vw, 12px);
+    min-width: clamp(180px, 30vw, 250px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.windy-widget {
+    background: var(--card-bg);
+    color: var(--card-text);
+    padding: 0;
+    border-radius: clamp(8px, 1.5vw, 12px);
+    min-width: clamp(180px, 30vw, 250px);
+    height: auto;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    overflow: hidden;
+    position: relative;
+    transition: background 0.3s ease, color 0.3s ease;
+}
+
+.windy-widget iframe {
+    width: 100%;
+    height: 200px;
+    border: none;
+    display: block;
+}
+
+.windy-main {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 2vw, 15px);
+    margin-bottom: clamp(5px, 1vw, 10px);
+}
+
+.windy-icon { font-size: clamp(2em, 5vw, 3em); }
+.windy-speed { font-size: clamp(1.5em, 4vw, 2.5em); font-weight: bold; }
+.windy-details { font-size: clamp(0.75em, 1.8vw, 0.9em); opacity: 0.9; }
+.windy-location { font-weight: bold; margin-bottom: 5px; }
+.windy-direction { text-transform: capitalize; }
+.windy-loading { text-align: center; opacity: 0.8; }
+
+.weather-main {
+    display: flex;
+    align-items: center;
+    gap: clamp(8px, 2vw, 15px);
+    margin-bottom: clamp(5px, 1vw, 10px);
+}
+
+.weather-icon { font-size: clamp(2em, 5vw, 3em); }
+.weather-temp { font-size: clamp(1.5em, 4vw, 2.5em); font-weight: bold; }
+.weather-details { font-size: clamp(0.75em, 1.8vw, 0.9em); opacity: 0.9; }
+.weather-location { font-weight: bold; margin-bottom: 5px; }
+.weather-condition { text-transform: capitalize; }
+.weather-loading { text-align: center; opacity: 0.8; }
+
+.camera-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+    gap: clamp(12px, 2.5vw, 25px);
+    margin-bottom: clamp(15px, 3vw, 30px);
+}
+
+.camera-card {
+    background: var(--card-bg);
+    border-radius: clamp(8px, 1.5vw, 15px);
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    transition: transform 0.3s ease, background 0.3s ease;
+    position: relative;
+}
+
+.camera-card:hover { transform: translateY(-5px); }
+
+.camera-card.offline {
+    opacity: 0.6;
+    border: 3px solid var(--alert-critical);
+}
+
+.camera-header {
+    background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+    color: white;
+    padding: clamp(10px, 2vw, 15px) clamp(12px, 2.5vw, 20px);
+    font-size: clamp(1em, 2.5vw, 1.2em);
+    font-weight: bold;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.offline-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: var(--alert-critical);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 0.8em;
+    font-weight: bold;
+    animation: pulse 2s infinite;
+}
+
+.camera-timestamp {
+    font-size: clamp(0.7em, 1.8vw, 0.85em);
+    color: #f0f0f0;
+    margin-top: 4px;
+    font-weight: normal;
+}
+
+.camera-image-container {
+    position: relative;
+    width: 100%;
+    height: 0;
+    padding-bottom: 75%;
+    background: #000;
+    overflow: hidden;
+}
+
+.camera-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: none;
+}
+
+.camera-image.active { display: block; }
+
+.image-nav {
+    position: absolute;
+    bottom: clamp(5px, 1.5vw, 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: clamp(4px, 1vw, 8px);
+    background: rgba(0,0,0,0.6);
+    padding: clamp(5px, 1vw, 8px) clamp(8px, 1.5vw, 12px);
+    border-radius: 20px;
+}
+
+.nav-dot {
+    width: clamp(8px, 1.5vw, 10px);
+    height: clamp(8px, 1.5vw, 10px);
+    border-radius: 50%;
+    background: rgba(255,255,255,0.5);
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.nav-dot.active {
+    background: white;
+    width: clamp(20px, 3vw, 25px);
+    border-radius: 5px;
+}
+
+.camera-stats {
+    padding: clamp(12px, 2.5vw, 20px);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(8px, 2vw, 15px);
+}
+
+.stat {
+    text-align: center;
+    padding: clamp(8px, 1.5vw, 10px);
+    background: var(--stat-bg);
+    border-radius: clamp(6px, 1vw, 8px);
+    transition: background 0.3s ease;
+    position: relative;
+}
+
+.stat.alert {
+    background: var(--alert-warning);
+    color: white;
+}
+
+.stat.alert .stat-label,
+.stat.alert .stat-value {
+    color: white;
+}
+
+.stat.critical {
+    background: var(--alert-critical);
+    color: white;
+}
+
+.stat.critical .stat-label,
+.stat.critical .stat-value {
+    color: white;
+}
+
+.stat.critical .stat-value {
+    animation: pulse 2s infinite;
+}
+
+.stat.alert .stat-value {
+    animation: pulse 2s infinite;
+}
+
+.stat-label {
+    font-size: clamp(0.65em, 1.5vw, 0.8em);
+    color: var(--card-subtext);
+    margin-bottom: clamp(3px, 0.8vw, 5px);
+    transition: color 0.3s ease;
+}
+
+.stat-value {
+    font-size: clamp(0.9em, 2.2vw, 1.3em);
+    font-weight: bold;
+    color: var(--stat-text);
+    transition: color 0.3s ease;
+}
+
+.wifi-bars {
+    display: inline-flex;
+    gap: clamp(1px, 0.3vw, 2px);
+    align-items: flex-end;
+    height: clamp(15px, 3vw, 20px);
+}
+
+.wifi-bar {
+    width: clamp(3px, 0.6vw, 4px);
+    background: #ddd;
+    border-radius: 2px;
+}
+
+.wifi-bar.active { background: #4CAF50; }
+.wifi-bar:nth-child(1){height:20%;}
+.wifi-bar:nth-child(2){height:40%;}
+.wifi-bar:nth-child(3){height:60%;}
+.wifi-bar:nth-child(4){height:80%;}
+.wifi-bar:nth-child(5){height:100%;}
+
+.no-cameras {
+    text-align: center;
+    padding: clamp(40px, 8vw, 60px) clamp(15px, 3vw, 20px);
+    background: var(--header-bg);
+    border-radius: clamp(10px, 2vw, 15px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    transition: background 0.3s ease;
+}
+
+.no-cameras h2{
+    color: var(--header-text);
+    margin-bottom: clamp(10px, 2vw, 15px);
+    font-size: clamp(1.2em, 3vw, 1.5em);
+    transition: color 0.3s ease;
+}
+
+.no-cameras p{
+    color: var(--subtitle-text);
+    font-size: clamp(0.9em, 2vw, 1.1em);
+    transition: color 0.3s ease;
+}
+
+footer {
+    text-align: center;
+    color: white;
+    padding: clamp(15px, 3vw, 20px);
+    font-size: clamp(0.75em, 1.8vw, 0.9em);
+}
+
+@media(max-width: 768px){
+    header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .header-left {
+        text-align: center;
+    }
+
+    .header-right {
+        justify-content: center;
+        width: 100%;
+    }
+
+    .weather-widget {
+        width: 100%;
+        min-width: auto;
+    }
+
+    .windy-widget {
+        width: 100%;
+        min-width: auto;
+    }
+
+    .camera-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .camera-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .stat {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: clamp(10px, 2vw, 12px);
+    }
+
+    .stat-label {
+        text-align: left;
+        margin-bottom: 0;
+    }
+
+    .alert-banner {
+        font-size: 0.9em;
+    }
+
+    .alert-item {
+        padding: 12px 15px;
+    }
+}
+
+@media(max-width: 480px){
+    body {
+        padding: 5px;
+    }
+
+    .camera-image-container {
+        padding-bottom: 75%;
+    }
+}
+
+@media(min-width: 1400px){
+    .camera-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media(min-width: 1920px){
+    .camera-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+@media(min-width: 768px) and (max-width: 1399px){
+    .camera-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+</style>
+</head>
+<body>
+
+<!-- Alert Banner -->
+<div class="alert-banner" id="alert-banner"></div>
+
+<div class="container">
+<header>
+    <div class="header-left">
+        <h1>&#x1F3A5; Blink Camera Monitor</h1>
+        <p class="subtitle">Real-time camera surveillance dashboard</p>
+        <p class="timestamp">
+            <span class="status-indicator"></span>
+            <span id="current-time"></span>
+        </p>
+    </div>
+    <div class="header-right">
+        <div class="windy-widget" id="windy-widget">
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--card-text);padding:20px;text-align:center;">
+                &#x1F310; Loading radar map...
+            </div>
+        </div>
+        <div class="weather-widget" id="weather-widget">
+            <div class="weather-loading">Loading weather...</div>
+        </div>
+        <div class="arm-toggle" id="arm-toggle" onclick="toggleArm()">
+            <div class="arm-toggle-slider">
+                <span id="arm-icon">&#x1F513;</span>
+            </div>
+            <span class="arm-toggle-label armed-label">Armed</span>
+            <span class="arm-toggle-label disarmed-label">Disarm</span>
+        </div>
+        <div class="theme-toggle" onclick="toggleTheme()">
+            <div class="theme-toggle-slider">
+                <span id="theme-icon">&#x2600;&#xFE0F;</span>
+            </div>
+        </div>
+    </div>
+</header>
+
+{% if cameras %}
+<div class="camera-grid">
+    {% for camera in cameras %}
+    <div class="camera-card {% if camera.images|length == 0 %}offline{% endif %}" data-camera="{{ camera.normalized_name }}">
+        <div class="camera-header">
+            {% if camera.images|length == 0 %}
+            <div class="offline-badge">OFFLINE</div>
+            {% endif %}
+            {{ camera.name }}
+            <div class="camera-timestamp" id="timestamp-{{ camera.normalized_name }}"></div>
+        </div>
+
+        <div class="camera-image-container">
+            {% if camera.images %}
+                {% for image in camera.images %}
+                <img src="/image/{{ camera.normalized_name }}/{{ image }}"
+                     alt="{{ camera.name }}"
+                     class="camera-image {% if loop.first %}active{% endif %}"
+                     data-camera="{{ camera.normalized_name }}"
+                     data-index="{{ loop.index0 }}"
+                     data-filename="{{ image }}">
+                {% endfor %}
+                {% if camera.images|length > 1 %}
+                <div class="image-nav">
+                    {% for image in camera.images %}
+                    <div class="nav-dot {% if loop.first %}active{% endif %}"
+                         data-camera="{{ camera.normalized_name }}"
+                         data-index="{{ loop.index0 }}"></div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% else %}
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-size:clamp(0.9em, 2vw, 1.1em);flex-direction:column;gap:10px;">
+                <div style="font-size:3em;">&#x1F535;</div>
+                <div>Camera Offline</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="camera-stats">
+            <div class="stat" data-temperature="{{ camera.temperature }}" data-camera="{{ camera.normalized_name }}">
+                <div class="stat-label">Temperature</div>
+                <div class="stat-value" id="temp-{{ camera.normalized_name }}">
+                    {{ camera.temperature }}
+                </div>
+            </div>
+            <div class="stat" data-battery="{{ camera.battery }}" data-camera="{{ camera.normalized_name }}">
+                <div class="stat-label">Battery</div>
+                <div class="stat-value" id="battery-{{ camera.normalized_name }}">
+                    {{ camera.battery }}
+                </div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">WiFi</div>
+                <div class="stat-value">
+                    <div class="wifi-bars">
+                        {% for i in range(1,6) %}
+                        <div class="wifi-bar {% if i <= camera.wifi %}active{% endif %}"></div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="no-cameras">
+    <h2>No cameras configured</h2>
+    <p>Run `python blink_config_setup.py` to configure your cameras</p>
+</div>
+{% endif %}
+
+<footer>
+    &#x1F504; Updates every 5 min | Cycles every 3 sec
+</footer>
+</div>
+
+<script>
+// Load saved theme immediately (before page renders)
+(function() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.body.setAttribute('data-theme', savedTheme);
+})();
+
+// Configuration
+const TEMP_HOT_THRESHOLD = 113; // °F
+const TEMP_COLD_THRESHOLD = -4; // °F
+const BATTERY_LOW_THRESHOLD = 20; // %
+
+// Alert management
+const alerts = new Map();
+
+function showAlert(id, type, icon, title, message) {
+    if (alerts.has(id)) return;
+
+    const banner = document.getElementById('alert-banner');
+    const alertItem = document.createElement('div');
+    alertItem.className = `alert-item ${type}`;
+    alertItem.dataset.alertId = id;
+
+    alertItem.innerHTML = `
+        <div class="alert-content">
+            <div class="alert-icon">${icon}</div>
+            <div class="alert-text">
+                <div class="alert-title">${title}</div>
+                <div class="alert-message">${message}</div>
+            </div>
+        </div>
+        <button class="alert-close" onclick="dismissAlert('${id}')">&#x2715;</button>
+    `;
+
+    banner.appendChild(alertItem);
+    banner.classList.add('show');
+    document.body.classList.add('has-alerts');
+    alerts.set(id, alertItem);
+}
+
+function dismissAlert(id) {
+    const alertItem = alerts.get(id);
+    if (alertItem) {
+        alertItem.style.animation = 'slideDown 0.3s ease-out reverse';
+        setTimeout(() => {
+            alertItem.remove();
+            alerts.delete(id);
+
+            if (alerts.size === 0) {
+                document.getElementById('alert-banner').classList.remove('show');
+                document.body.classList.remove('has-alerts');
+            }
+        }, 300);
+    }
+}
+
+function parseTemperature(tempStr) {
+    if (!tempStr || tempStr === 'N/A') return null;
+    const cleaned = tempStr.replace(/[^\d.-]/g, '');
+    return parseFloat(cleaned);
+}
+
+function parseBattery(batteryStr) {
+    if (!batteryStr || batteryStr === 'N/A') return null;
+
+    // Handle text statuses
+    batteryStr = batteryStr.toLowerCase().trim();
+    if (batteryStr === 'low') return 10;
+    if (batteryStr === 'ok' || batteryStr === 'okay') return 100;
+
+    // Handle numeric percentages
+    const match = batteryStr.match(/(\d+)/);
+    return match ? parseInt(match[1]) : null;
+}
+
+function checkCameraAlerts() {
+    // Alert checking disabled - only show visual indicators on camera cards
+}
+
+// Arm/Disarm Toggle
+let isTogglingArm = false;
+
+async function loadArmStatus() {
+    try {
+        const response = await fetch('/api/arm/status');
+        const data = await response.json();
+
+        if (data.success) {
+            const toggle = document.getElementById('arm-toggle');
+            const icon = document.getElementById('arm-icon');
+
+            if (data.armed) {
+                toggle.classList.add('armed');
+                icon.innerHTML = '&#x1F6E1;&#xFE0F;'; // Shield
+            } else {
+                toggle.classList.remove('armed');
+                icon.innerHTML = '&#x1F513;'; // Unlocked
+            }
+        }
+    } catch (error) {
+        console.error('Error loading arm status:', error);
+    }
+}
+
+async function toggleArm() {
+    if (isTogglingArm) return;
+
+    const toggle = document.getElementById('arm-toggle');
+    const icon = document.getElementById('arm-icon');
+    const isArmed = toggle.classList.contains('armed');
+
+    isTogglingArm = true;
+    toggle.classList.add('loading');
+
+    try {
+        const response = await fetch('/api/arm/set', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({arm: !isArmed})
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            if (result.armed) {
+                toggle.classList.add('armed');
+                icon.innerHTML = '&#x1F6E1;&#xFE0F;'; // Shield
+                console.log('System ARMED');
+            } else {
+                toggle.classList.remove('armed');
+                icon.innerHTML = '&#x1F513;'; // Unlocked
+                console.log('System DISARMED');
+            }
+        } else {
+            alert('Failed to change arm state: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error toggling arm state:', error);
+        alert('Error communicating with server');
+    } finally {
+        toggle.classList.remove('loading');
+        isTogglingArm = false;
+    }
+}
+
+// Dark mode toggle
+function toggleTheme() {
+    const body = document.body;
+    const currentTheme = body.getAttribute('data-theme');
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    body.setAttribute('data-theme', newTheme);
+    document.getElementById('theme-icon').innerHTML = newTheme === 'light' ? '&#x2600;&#xFE0F;' : '&#x1F319;';
+    localStorage.setItem('theme', newTheme);
+}
+
+// Update theme icon after DOM loads
+const savedTheme = localStorage.getItem('theme') || 'light';
+document.getElementById('theme-icon').innerHTML = savedTheme === 'light' ? '&#x2600;&#xFE0F;' : '&#x1F319;';
+
+// Current time
+function updateTime(){
+    const now=new Date();
+    document.getElementById('current-time').textContent=now.toLocaleString('en-US',{
+        weekday:'long',year:'numeric',month:'long',day:'numeric',
+        hour:'2-digit',minute:'2-digit',second:'2-digit'
+    });
+}
+updateTime();
+setInterval(updateTime,1000);
+
+// Check battery levels and apply styling with JavaScript
+function checkBatteryLevels() {
+    document.querySelectorAll('[data-battery]').forEach(statDiv => {
+        const batteryStr = statDiv.getAttribute('data-battery');
+        const cameraName = statDiv.getAttribute('data-camera');
+
+        const battery = parseBattery(batteryStr);
+
+        if (battery !== null && battery <= BATTERY_LOW_THRESHOLD) {
+            statDiv.classList.add('critical');
+            const valueDiv = statDiv.querySelector('.stat-value');
+            if (valueDiv) {
+                const currentText = valueDiv.textContent.trim();
+                if (!currentText.includes('⚠')) {
+                    valueDiv.innerHTML = '&#x26A0;&#xFE0F; ' + currentText;
+                }
+            }
+        }
+    });
+}
+
+// Check temperature levels and apply styling with JavaScript
+function checkTemperatureLevels() {
+    document.querySelectorAll('[data-temperature]').forEach(statDiv => {
+        const tempStr = statDiv.getAttribute('data-temperature');
+        const cameraName = statDiv.getAttribute('data-camera');
+
+        const temp = parseTemperature(tempStr);
+
+        if (temp !== null) {
+            const valueDiv = statDiv.querySelector('.stat-value');
+            if (temp >= TEMP_HOT_THRESHOLD) {
+                statDiv.classList.add('alert');
+                if (valueDiv) {
+                    const currentText = valueDiv.textContent.trim();
+                    if (!currentText.includes('🔥')) {
+                        valueDiv.innerHTML = '&#x1F525; ' + currentText;
+                    }
+                }
+            } else if (temp <= TEMP_COLD_THRESHOLD) {
+                statDiv.classList.add('alert');
+                if (valueDiv) {
+                    const currentText = valueDiv.textContent.trim();
+                    if (!currentText.includes('❄')) {
+                        valueDiv.innerHTML = '&#x2744;&#xFE0F; ' + currentText;
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Run checks after page loads
+checkBatteryLevels();
+checkTemperatureLevels();
+
+// Cameras & carousel
+const cameras={};
+document.querySelectorAll('.camera-image').forEach(img=>{
+    const cam=img.dataset.camera;
+    if(!cameras[cam]){
+        cameras[cam]={currentIndex:0,images:document.querySelectorAll(`.camera-image[data-camera="${cam}"]`),dots:document.querySelectorAll(`.nav-dot[data-camera="${cam}"]`)};
+    }
+});
+
+function switchImage(cameraName,index){
+    const cam=cameras[cameraName];
+    if(!cam)return;
+    cam.images.forEach(img=>img.classList.remove('active'));
+    cam.dots.forEach(dot=>dot.classList.remove('active'));
+    cam.images[index].classList.add('active');
+    if(cam.dots[index]) cam.dots[index].classList.add('active');
+    cam.currentIndex=index;
+
+    const activeImage=cam.images[index];
+    if(activeImage){
+        const filename=activeImage.dataset.filename || activeImage.src.split('/').pop();
+        updateImageTimestamp(cameraName,filename);
+    }
+}
+
+// Auto-cycle
+setInterval(()=>{
+    Object.keys(cameras).forEach(cameraName=>{
+        const cam=cameras[cameraName];
+        if(cam.images.length>1){
+            const nextIndex=(cam.currentIndex+1)%cam.images.length;
+            switchImage(cameraName,nextIndex);
+        }
+    });
+},3000);
+
+// Nav dots click
+document.querySelectorAll('.nav-dot').forEach(dot=>{
+    dot.addEventListener('click',e=>{
+        const cam=e.target.dataset.camera;
+        const idx=parseInt(e.target.dataset.index);
+        switchImage(cam,idx);
+    });
+});
+
+// Timestamp function
+function updateImageTimestamp(cameraName,filename){
+    const el=document.getElementById(`timestamp-${cameraName}`);
+    if(!el)return;
+    const match=filename.match(/_(\d{8})_(\d{6})/);
+    if(match){
+        const dateStr=match[1]; const timeStr=match[2];
+        const year=dateStr.substring(0,4),month=dateStr.substring(4,6),day=dateStr.substring(6,8);
+        let hours=parseInt(timeStr.substring(0,2)),minutes=timeStr.substring(2,4),seconds=timeStr.substring(4,6);
+        const ampm=hours>=12?'PM':'AM';
+        hours=hours%12; hours=hours?hours:12;
+        const formattedTime=`${hours}:${minutes}:${seconds} ${ampm}`;
+        const formattedDate=`${month}/${day}/${year}`;
+        el.textContent=`${formattedDate} ${formattedTime}`;
+    } else { el.textContent='Unknown time'; }
+}
+
+// Initialize first image timestamps
+Object.keys(cameras).forEach(cameraName => {
+    const cam = cameras[cameraName];
+    if (cam.images.length > 0) {
+        const firstImage = cam.images[0];
+        const filename = firstImage.dataset.filename || firstImage.src.split('/').pop();
+        updateImageTimestamp(cameraName, filename);
+    }
+});
+
+// Weather widget with dynamic location from config
+const WEATHER_LOCATION = "{{ location.display if location else 'Bethel Park, PA' }}";
+const WEATHER_CITY = "{{ location.city if location else 'Bethel Park' }}";
+const WEATHER_STATE = "{{ location.state if location else 'PA' }}";
+const WEATHER_LAT = {{ location.lat if location else 40.3267 }};
+const WEATHER_LON = {{ location.lon if location else -80.0171 }};
+
+async function fetchWeather(){
+    const widget=document.getElementById('weather-widget');
+    try{
+        // Use local backend proxy instead of direct wttr.in call (avoids CORS)
+        const resp=await fetch('/api/weather', {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json'
+            }
+        });
+
+        if (!resp.ok) {
+            throw new Error(`HTTP error! status: ${resp.status}`);
+        }
+
+        const data=await resp.json();
+
+        if (data.error || !data.current_condition || !data.current_condition[0]) {
+            throw new Error('Invalid weather data format');
+        }
+
+        const current=data.current_condition[0];
+        const iconMap={
+            'Sunny':'&#x2600;&#xFE0F;',
+            'Clear':'&#x1F319;',
+            'Partly cloudy':'&#x26C5;',
+            'Cloudy':'&#x2601;&#xFE0F;',
+            'Overcast':'&#x2601;&#xFE0F;',
+            'Mist':'&#x1F32B;&#xFE0F;',
+            'Fog':'&#x1F32B;&#xFE0F;',
+            'Light rain':'&#x1F327;&#xFE0F;',
+            'Moderate rain':'&#x1F327;&#xFE0F;',
+            'Heavy rain':'&#x26C8;&#xFE0F;',
+            'Light snow':'&#x1F328;&#xFE0F;',
+            'Heavy snow':'&#x2744;&#xFE0F;',
+            'Thunderstorm':'&#x26C8;&#xFE0F;'
+        };
+        const icon=iconMap[current.weatherDesc[0].value]||'&#x1F321;&#xFE0F;';
+        const tempF=current.temp_F;
+        const feelsLike=current.FeelsLikeF;
+        const condition=current.weatherDesc[0].value;
+        const humidity=current.humidity;
+        widget.innerHTML=`
+            <div class="weather-main">
+                <div class="weather-icon">${icon}</div>
+                <div>
+                    <div class="weather-temp">${tempF}°F</div>
+                    <div class="weather-details">Feels ${feelsLike}°F</div>
+                </div>
+            </div>
+            <div class="weather-details">
+                <div class="weather-location">${WEATHER_LOCATION}</div>
+                <div class="weather-condition">${condition}</div>
+                <div>Humidity: ${humidity}%</div>
+            </div>
+        `;
+    }catch(e){
+        console.error('Weather fetch error:', e);
+        widget.innerHTML=`
+            <div class="weather-main">
+                <div class="weather-icon">&#x1F321;&#xFE0F;</div>
+                <div>
+                    <div class="weather-temp">--°F</div>
+                    <div class="weather-details">Service unavailable</div>
+                </div>
+            </div>
+            <div class="weather-details">
+                <div class="weather-location">${WEATHER_LOCATION}</div>
+                <div style="font-size:0.8em;opacity:0.8;">Weather service temporarily unavailable</div>
+            </div>
+        `;
+    }
+}
+
+// Windy radar widget with dynamic location from config
+function loadWindyRadar(){
+    const widget=document.getElementById('windy-widget');
+    const windyUrl = `https://embed.windy.com/embed2.html?lat=${WEATHER_LAT}&lon=${WEATHER_LON}&detailLat=${WEATHER_LAT}&detailLon=${WEATHER_LON}&width=650&height=450&zoom=8&level=surface&overlay=radar&product=ecmwf&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1`;
+    widget.innerHTML = `<iframe src="${windyUrl}" frameborder="0"></iframe>`;
+}
+
+loadWindyRadar();
+fetchWeather();
+// Refresh weather every 15 minutes (instead of 10) to avoid rate limiting
+setInterval(fetchWeather, 900000);
+
+// Load arm status on page load and poll every 10 seconds for sync with Blink app
+loadArmStatus();
+setInterval(loadArmStatus, 10000);
+
+// Check for alerts on page load
+checkCameraAlerts();
+
+// Refresh page every 5 min with smooth transition
+setInterval(()=>{
+    document.body.style.transition = 'opacity 0.3s';
+    document.body.style.opacity = '0.8';
+    setTimeout(() => {
+        location.reload();
+    }, 300);
+}, 300000);
+</script>
+</body>
+</html>
