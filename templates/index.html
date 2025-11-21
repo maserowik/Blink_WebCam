@@ -1132,11 +1132,11 @@ footer {
 
         <div class="camera-image-container">
             <!-- Snooze Badge -->
-            {% if camera.snooze_status.is_snoozed %}
-            <div class="snooze-badge" id="snooze-badge-{{ camera.normalized_name }}">
-                &#x1F515; Until {{ camera.snooze_status.snooze_until_full }}
+           {% if camera.snooze_status.is_snoozed %}
+            <div class="snooze-badge" id="snooze-badge-{{ camera.normalized_name }}" data-expiry="{{ camera.snooze_status.snooze_until }}">
+                 &#x1F515; <span id="snooze-countdown-{{ camera.normalized_name }}">{{ camera.snooze_status.minutes_remaining }}m left</span>
             </div>
-            {% endif %}
+             {% endif %}
 
             <!-- Snooze Button -->
             <button class="snooze-icon-btn {% if camera.snooze_status.is_snoozed %}active{% endif %}"
@@ -1947,6 +1947,46 @@ setInterval(()=>{
         location.reload();
     }, 300);
 }, 300000);
+ // Live countdown for snooze badges
+function updateSnoozeCountdowns() {
+    document.querySelectorAll('.snooze-badge[data-expiry]').forEach(badge => {
+        const cameraName = badge.id.replace('snooze-badge-', '');
+        const countdownSpan = document.getElementById(`snooze-countdown-${cameraName}`);
+        const expiryISO = badge.dataset.expiry;
+
+        if (!countdownSpan || !expiryISO) return;
+
+        const expiry = new Date(expiryISO);
+        const now = new Date();
+        const diffMs = expiry - now;
+
+        if (diffMs <= 0) {
+            // Snooze expired - reload page
+            location.reload();
+            return;
+        }
+
+        // Calculate time remaining
+        const totalSeconds = Math.floor(diffMs / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        // Format display
+        if (hours > 0) {
+            countdownSpan.textContent = `${hours}h ${minutes}m ${seconds}s left`;
+        } else if (minutes > 0) {
+            countdownSpan.textContent = `${minutes}m ${seconds}s left`;
+        } else {
+            countdownSpan.textContent = `${seconds}s left`;
+        }
+    });
+}
+
+// Update countdown every second
+setInterval(updateSnoozeCountdowns, 1000);
+updateSnoozeCountdowns(); // Initial call
+
 </script>
 </body>
 </html>

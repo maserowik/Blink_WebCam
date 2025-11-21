@@ -223,8 +223,8 @@ class AlertSnooze:
 
         if is_snoozed and expiry:
             status["snooze_until"] = expiry.isoformat()
-            status["snooze_until_formatted"] = expiry.strftime("%I:%M %p")
-            status["snooze_until_full"] = expiry.strftime("%m/%d/%Y %I:%M %p")
+            status["snooze_until_formatted"] = expiry.strftime("%I:%M:%S %p")
+            status["snooze_until_full"] = expiry.strftime("%m/%d/%Y %I:%M:%S %p")
 
             # Calculate minutes remaining
             now = datetime.now()
