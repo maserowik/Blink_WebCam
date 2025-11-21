@@ -11,6 +11,9 @@ from blinkpy.helpers.util import BlinkURLHandler
 import requests
 import logging
 
+# Import snooze manager
+from alert_snooze import AlertSnooze, SNOOZE_DURATIONS
+
 app = Flask(__name__)
 
 # Configuration
@@ -19,6 +22,9 @@ TOKEN_FILE = "blink_token.json"
 ROOT_DIR = Path(".")
 CAMERAS_DIR = ROOT_DIR / "cameras"
 LOG_FOLDER = ROOT_DIR / "logs"
+
+# Initialize snooze manager
+snooze_manager = AlertSnooze()
 
 # Suppress blinkpy sync_module errors about last_refresh
 logging.getLogger('blinkpy.sync_module').setLevel(logging.CRITICAL)
@@ -87,6 +93,142 @@ def get_location():
         }
 
 
+def get_latest_images_from_date_folders(camera_folder: Path, carousel_images: int) -> list:
+    """
+    Get latest N images from date-organized folders
+
+    Args:
+        camera_folder: Path to camera folder
+        carousel_images: Number of images to retrieve
+
+    Returns:
+        List of image paths (relative to camera folder)
+    """
+    all_images = []
+
+    # Find all date folders (YYYY-MM-DD format)
+    import re
+    date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+    date_folders = [d for d in camera_folder.iterdir()
+                    if d.is_dir() and date_pattern.match(d.name)]
+
+    # Sort by date (newest first)
+    date_folders.sort(key=lambda d: d.name, reverse=True)
+
+    # Collect images from newest to oldest
+    for date_folder in date_folders:
+        images_in_folder = sorted(
+            date_folder.glob("*.jpg"),
+            key=lambda x: x.stat().st_mtime,
+            reverse=True
+        )
+
+        for img in images_in_folder:
+            # Store relative path: "2024-11-18/front-door_20241118_120000.jpg"
+            relative_path = f"{date_folder.name}/{img.name}"
+            all_images.append(relative_path)
+
+            if len(all_images) >= carousel_images:
+                return all_images
+
+    return all_images
+
+
+def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
+    """
+    Get latest log entry from most recent log file
+
+    Args:
+        log_folder: Path to camera's log folder
+        camera_name: Normalized camera name
+
+    Returns:
+        Dictionary with parsed log data
+    """
+    import re
+    
+    # Pattern: {camera_name}_YYYY-MM-DD.log
+    pattern = re.compile(rf'^{re.escape(camera_name)}_(\d{{4}}-\d{{2}}-\d{{2}})\.log$')
+    
+    log_files = []
+    for file in log_folder.iterdir():
+        if file.is_file():
+            match = pattern.match(file.name)
+            if match:
+                date_str = match.group(1)
+                log_files.append((date_str, file))
+    
+    if not log_files:
+        return {
+            'temp': 'N/A',
+            'battery': 'N/A',
+            'wifi': 0,
+            'timestamp': 'N/A'
+        }
+    
+    # Sort by date (newest first)
+    log_files.sort(key=lambda x: x[0], reverse=True)
+    latest_log = log_files[0][1]
+    
+    # Read last line
+    try:
+        with open(latest_log, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+            if not lines:
+                return {
+                    'temp': 'N/A',
+                    'battery': 'N/A',
+                    'wifi': 0,
+                    'timestamp': 'N/A'
+                }
+            
+            last_line = lines[-1]
+            parts = last_line.split(" | ")
+            
+            temp = "N/A"
+            battery = "N/A"
+            wifi = 0
+            timestamp = "N/A"
+            
+            if len(parts) >= 4:
+                timestamp = parts[0]
+                for part in parts:
+                    if "Temp:" in part:
+                        temp_str = part.split("Temp:")[1].strip().split()[0]
+                        temp = temp_str.replace("\u00B0F", "").replace("\u00B0F", "")
+                        temp_clean = ""
+                        for char in temp:
+                            if char.isdigit() or char == '.' or char == '-':
+                                temp_clean += char
+                        temp = temp_clean if temp_clean else "N/A"
+                    elif "Battery:" in part:
+                        battery_str = part.split("Battery:")[1].strip()
+                        battery_parts = battery_str.split()
+                        battery = battery_parts[0] if battery_parts else "N/A"
+                    elif "WiFi:" in part:
+                        wifi_str = part.split("WiFi:")[1].strip()
+                        wifi_parts = wifi_str.split("/")
+                        try:
+                            wifi = int(wifi_parts[0])
+                        except:
+                            wifi = 0
+            
+            return {
+                'temp': temp,
+                'battery': battery,
+                'wifi': wifi,
+                'timestamp': timestamp
+            }
+    except Exception as e:
+        print(f"Error parsing log for {camera_name}: {e}")
+        return {
+            'temp': 'N/A',
+            'battery': 'N/A',
+            'wifi': 0,
+            'timestamp': 'N/A'
+        }
+
+
 def get_camera_data():
     """Read camera configuration and latest data"""
     try:
@@ -97,68 +239,32 @@ def get_camera_data():
         carousel_images = config.get("carousel_images", 5)
         camera_data = []
 
+        # Clean up expired snoozes before building camera data
+        snooze_manager.cleanup_expired_snoozes()
+
         for cam_name in cameras:
             normalized_name = normalize_camera_name(cam_name)
             cam_folder = CAMERAS_DIR / normalized_name
-            log_file = LOG_FOLDER / "cameras" / normalized_name / f"{normalized_name}.log"
+            log_folder = LOG_FOLDER / "cameras" / normalized_name
 
-            # Get latest N images
-            images = []
-            if cam_folder.exists():
-                all_images = sorted(
-                    cam_folder.glob("*.jpg"),
-                    key=lambda x: x.stat().st_mtime,
-                    reverse=True
-                )
-                images = [img.name for img in all_images[:carousel_images]]
+            # Get latest N images from date folders
+            images = get_latest_images_from_date_folders(cam_folder, carousel_images)
 
             # Get latest log entry
-            temp = "N/A"
-            battery = "N/A"
-            wifi = 0
-            timestamp = "N/A"
+            log_data = get_latest_log_entry(log_folder, normalized_name)
 
-            if log_file.exists():
-                try:
-                    with open(log_file, "r", encoding="utf-8", errors="ignore") as f:
-                        lines = f.readlines()
-                        if lines:
-                            last_line = lines[-1]
-                            parts = last_line.split(" | ")
-                            if len(parts) >= 4:
-                                timestamp = parts[0]
-                                for part in parts:
-                                    if "Temp:" in part:
-                                        temp_str = part.split("Temp:")[1].strip().split()[0]
-                                        temp = temp_str.replace("Â°F", "").replace("Ã‚Â°F", "")
-                                        temp_clean = ""
-                                        for char in temp:
-                                            if char.isdigit() or char == '.' or char == '-':
-                                                temp_clean += char
-                                        temp = temp_clean if temp_clean else "N/A"
-                                    elif "Battery:" in part:
-                                        battery_str = part.split("Battery:")[1].strip()
-                                        battery_parts = battery_str.split()
-                                        battery = battery_parts[0] if battery_parts else "N/A"
-                                    elif "WiFi:" in part:
-                                        wifi_str = part.split("WiFi:")[1].strip()
-                                        wifi_parts = wifi_str.split("/")
-                                        try:
-                                            wifi = int(wifi_parts[0])
-                                        except:
-                                            wifi = 0
-                except Exception as e:
-                    print(f"Error parsing log for {cam_name}: {e}")
-                    pass
+            # Get snooze status for this camera
+            snooze_status = snooze_manager.get_snooze_status(normalized_name)
 
             camera_data.append({
                 "name": cam_name,
                 "normalized_name": normalized_name,
                 "images": images,
-                "temperature": temp,
-                "battery": battery,
-                "wifi": wifi,
-                "timestamp": timestamp
+                "temperature": log_data['temp'],
+                "battery": log_data['battery'],
+                "wifi": log_data['wifi'],
+                "timestamp": log_data['timestamp'],
+                "snooze_status": snooze_status
             })
 
         return camera_data
@@ -251,7 +357,12 @@ def index():
     """Main page with camera grid"""
     cameras = get_camera_data()
     location = get_location()
-    return render_template('index.html', cameras=cameras, location=location)
+    
+    # Get list of normalized camera names for global snooze check
+    camera_names = [cam['normalized_name'] for cam in cameras]
+    all_snoozed = snooze_manager.are_all_cameras_snoozed(camera_names)
+    
+    return render_template('index.html', cameras=cameras, location=location, all_snoozed=all_snoozed)
 
 
 @app.route('/api/cameras')
@@ -310,18 +421,161 @@ def api_arm_set():
     return jsonify(result)
 
 
-@app.route('/image/<camera_name>/<image_name>')
-def get_image(camera_name, image_name):
-    """Serve camera images"""
-    image_path = CAMERAS_DIR / camera_name / image_name
-    if image_path.exists():
-        return send_file(image_path, mimetype='image/jpeg')
+# Snooze API Endpoints
+
+@app.route('/api/snooze/durations')
+def api_snooze_durations():
+    """Get available snooze durations"""
+    return jsonify({
+        "durations": SNOOZE_DURATIONS,
+        "formatted": {k: f"{v} min" if v < 60 else f"{v // 60} hr"
+                      for k, v in SNOOZE_DURATIONS.items()}
+    })
+
+
+@app.route('/api/snooze/status/<camera_name>')
+def api_snooze_status(camera_name):
+    """Get snooze status for a specific camera"""
+    status = snooze_manager.get_snooze_status(camera_name)
+    return jsonify(status)
+
+
+@app.route('/api/snooze/all/status')
+def api_snooze_all_status():
+    """Get global snooze all status"""
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
+        
+        cameras = config.get("cameras", [])
+        camera_names = [normalize_camera_name(cam) for cam in cameras]
+        
+        all_snoozed = snooze_manager.are_all_cameras_snoozed(camera_names)
+        
+        return jsonify({
+            "all_snoozed": all_snoozed,
+            "success": True
+        })
+    except Exception as e:
+        return jsonify({
+            "all_snoozed": False,
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/snooze/set', methods=['POST'])
+def api_snooze_set():
+    """Snooze a camera for a specified duration"""
+    data = request.get_json()
+    camera_name = data.get('camera_name')
+    duration_minutes = data.get('duration_minutes')
+
+    if not camera_name or duration_minutes is None:
+        return jsonify({"success": False, "error": "Missing camera_name or duration_minutes"}), 400
+
+    try:
+        snooze_manager.snooze_camera(camera_name, duration_minutes)
+        status = snooze_manager.get_snooze_status(camera_name)
+        return jsonify({"success": True, "status": status})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/snooze/all/set', methods=['POST'])
+def api_snooze_all_set():
+    """Snooze all cameras for a specified duration"""
+    data = request.get_json()
+    duration_minutes = data.get('duration_minutes')
+
+    if duration_minutes is None:
+        return jsonify({"success": False, "error": "Missing duration_minutes"}), 400
+
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
+        
+        cameras = config.get("cameras", [])
+        camera_names = [normalize_camera_name(cam) for cam in cameras]
+        
+        snooze_manager.snooze_all_cameras(camera_names, duration_minutes)
+        
+        return jsonify({"success": True, "count": len(camera_names)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/snooze/unset', methods=['POST'])
+def api_snooze_unset():
+    """Remove snooze from a camera"""
+    data = request.get_json()
+    camera_name = data.get('camera_name')
+
+    if not camera_name:
+        return jsonify({"success": False, "error": "Missing camera_name"}), 400
+
+    try:
+        snooze_manager.unsnooze_camera(camera_name)
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/snooze/all/unset', methods=['POST'])
+def api_snooze_all_unset():
+    """Remove snooze from all cameras"""
+    try:
+        snooze_manager.unsnooze_all_cameras()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/snooze/cleanup', methods=['POST'])
+def api_snooze_cleanup():
+    """Cleanup expired snoozes"""
+    try:
+        snooze_manager.cleanup_expired_snoozes()
+        return jsonify({"success": True})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/snooze/list')
+def api_snooze_list():
+    """Get all currently snoozed cameras"""
+    snoozed = snooze_manager.get_all_snoozed_cameras()
+
+    # Format for JSON response
+    formatted = {}
+    for camera_name, expiry in snoozed.items():
+        formatted[camera_name] = {
+            "expiry": expiry.isoformat(),
+            "expiry_formatted": expiry.strftime("%I:%M %p"),
+            "expiry_full": expiry.strftime("%m/%d/%Y %I:%M %p")
+        }
+
+    return jsonify(formatted)
+
+
+@app.route('/image/<camera_name>/<path:image_path>')
+def get_image(camera_name, image_path):
+    """
+    Serve camera images (supports date-organized folders)
+
+    Examples:
+      /image/front-door/2024-11-18/front-door_20241118_120000.jpg
+      /image/front-door/front-door_20241118_120000.jpg (legacy)
+    """
+    full_path = CAMERAS_DIR / camera_name / image_path
+    if full_path.exists():
+        return send_file(full_path, mimetype='image/jpeg')
     return "Image not found", 404
 
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("\U0001F3A5 Blink Camera Web Server")  # Camera emoji
+    print("Blink Camera Web Server")
     print("=" * 60)
 
     local_ip = get_local_ip()
@@ -330,20 +584,20 @@ if __name__ == '__main__':
         from waitress import serve
 
         logging.getLogger("waitress.queue").setLevel(logging.ERROR)
-        
-        print("\u2705 Using Waitress production server")  # Check mark
-        print(f"\U0001F310 Local access:   http://localhost:5000")  # Globe emoji
-        print(f"\U0001F310 Network access: http://{local_ip}:5000")
+
+        print("Using Waitress production server")
+        print(f"Local access:   http://localhost:5000")
+        print(f"Network access: http://{local_ip}:5000")
         print("=" * 60)
         print("Press Ctrl+C to stop the server")
         print("=" * 60)
         serve(app, host='0.0.0.0', port=5000, threads=6, channel_timeout=120, backlog=128)
     except ImportError:
-        print("\u26A0\uFE0F  Waitress not found - using Flask development server")  # Warning
-        print("\U0001F4A1 For production use, install Waitress:")  # Light bulb
+        print("Waitress not found - using Flask development server")
+        print("For production use, install Waitress:")
         print("   pip install waitress")
         print("=" * 60)
-        print(f"\U0001F310 Local access:   http://localhost:5000")
-        print(f"\U0001F310 Network access: http://{local_ip}:5000")
+        print(f"Local access:   http://localhost:5000")
+        print(f"Network access: http://{local_ip}:5000")
         print("=" * 60)
         app.run(host='0.0.0.0', port=5000, debug=False)

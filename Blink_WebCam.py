@@ -14,6 +14,9 @@ from PIL import Image
 # Import the new log rotation module
 from log_rotation import LogRotator
 
+# Import the new camera organizer module
+from camera_organizer import CameraOrganizer
+
 # Suppress the specific blinkpy warning about last_refresh
 warnings.filterwarnings("ignore", message=".*last_refresh.*")
 
@@ -57,7 +60,7 @@ else:
     # Create default config file
     config = {
         "poll_interval": 300,
-        "max_images": 10080,
+        "max_days": 7,
         "cameras": [
             "Front Door",
             "Tree Front Door",
@@ -69,7 +72,7 @@ else:
         json.dump(config, f, indent=4)
 
 POLL_INTERVAL = config.get("poll_interval", 300)  # seconds
-MAX_IMAGES = config.get("max_images", 10080)
+MAX_DAYS = config.get("max_days", 7)
 CAMERAS = config.get("cameras", [])
 
 ROOT_DIR = Path(".")
@@ -83,11 +86,12 @@ LOG_FOLDER.mkdir(parents=True, exist_ok=True)
 # Initialize log rotator (keeps 5 days of history)
 log_rotator = LogRotator(LOG_FOLDER, max_backups=5)
 
+# Initialize camera organizer
+camera_organizer = CameraOrganizer(CAMERAS_DIR, max_days=MAX_DAYS)
+
 # Define log file paths in organized folders
 MAIN_LOG_FOLDER = log_rotator.get_system_log_folder("main")
 TOKEN_LOG_FOLDER = log_rotator.get_system_log_folder("token")
-MAIN_LOG_FILE = MAIN_LOG_FOLDER / "main.log"
-TOKEN_LOG_FILE = TOKEN_LOG_FOLDER / "token.log"
 
 
 # ---------------- Utility Functions ---------------- #
@@ -113,24 +117,32 @@ def wifi_bars(dbm: int | None) -> int:
         return 0
 
 
+def get_current_log_file(folder: Path, name: str) -> Path:
+    """Get current log file with today's date"""
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    return folder / f"{name}_{date_str}.log"
+
+
 def log_main(msg: str):
-    """Log to system/main/main.log with automatic rotation check"""
+    """Log to system/main/main_YYYY-MM-DD.log with automatic rotation check"""
     log_rotator.check_and_rotate_if_needed()
 
+    log_file = get_current_log_file(MAIN_LOG_FOLDER, "main")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp} | {msg}\n"
-    with open(MAIN_LOG_FILE, "a", encoding="utf-8") as f:
+    with open(log_file, "a", encoding="utf-8") as f:
         f.write(line)
     print(line.strip())
 
 
 def log_token(msg: str):
-    """Log token refresh events to system/token/token.log file"""
+    """Log token refresh events to system/token/token_YYYY-MM-DD.log file"""
     log_rotator.check_and_rotate_if_needed()
 
+    log_file = get_current_log_file(TOKEN_LOG_FOLDER, "token")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp} | {msg}\n"
-    with open(TOKEN_LOG_FILE, "a", encoding="utf-8") as f:
+    with open(log_file, "a", encoding="utf-8") as f:
         f.write(line)
     # Also log to main log
     log_main(msg)
@@ -140,11 +152,12 @@ def get_camera_log_file(cam_name: str) -> Path:
     """Get the log file path for a camera in its own folder"""
     normalized_name = normalize_camera_name(cam_name)
     camera_log_folder = log_rotator.get_camera_log_folder(normalized_name)
-    return camera_log_folder / f"{normalized_name}.log"
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    return camera_log_folder / f"{normalized_name}_{date_str}.log"
 
 
 def log_camera(cam_name: str, msg: str):
-    """Log to cameras/{camera-name}/{camera-name}.log file with automatic rotation check"""
+    """Log to cameras/{camera-name}/{camera-name}_YYYY-MM-DD.log file with automatic rotation check"""
     log_rotator.check_and_rotate_if_needed()
 
     log_file = get_camera_log_file(cam_name)
@@ -159,14 +172,6 @@ def ensure_camera_folder(cam_name: str) -> Path:
     cam_folder = CAMERAS_DIR / normalized_name
     cam_folder.mkdir(parents=True, exist_ok=True)
     return cam_folder
-
-
-def trim_images(cam_folder: Path):
-    files = sorted(cam_folder.glob("*.jpg"), key=os.path.getmtime)
-    while len(files) > MAX_IMAGES:
-        oldest = files.pop(0)
-        oldest.unlink()
-        log_main(f"Deleted old image: {oldest.name}")
 
 
 async def countdown(seconds: int):
@@ -215,74 +220,67 @@ async def take_snapshot(blink):
         cam_folder = ensure_camera_folder(cam_name)
         bars = wifi_bars(cam.wifi_strength)
 
-       #  log_main(f"  Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')}")
         log_main(f"  Battery: {getattr(cam, 'battery', 'N/A')}")
         log_main(f"  Temperature: {getattr(cam, 'temperature', 'N/A')}")
 
         image_bytes = None
         source = "None"
 
-        # ---------------- Method 1: Snap a fresh picture ---------------- #
+        # ---------------- Method 2: Use get_media() only ---------------- #
         try:
-            log_main("  Method 1: Calling snap_picture() for fresh image...")
-            result = await cam.snap_picture()
-            if isinstance(result, bytes) and len(result) > 1000:
-                image_bytes = result
-                source = "snap_picture"
-                log_main(f"  [OK] snap_picture returned {len(image_bytes)} bytes")
+            log_main("  Calling get_media()...")
+            response = await cam.get_media()
+            if response.status == 200:
+                image_bytes = await response.read()
+                source = "get_media"
+                log_main(f"  [OK] get_media returned {len(image_bytes)} bytes")
             else:
-                log_main(f"  [FAIL] snap_picture returned invalid data: {type(result)}")
+                log_main(f"  [FAIL] get_media returned non-200: {response.status}")
         except Exception as e:
-            log_main(f"  [FAIL] snap_picture error: {type(e).__name__}: {e}")
+            log_main(f"  [FAIL] get_media error: {type(e).__name__}: {e}")
 
-        # ---------------- Method 2: Use get_media() as fallback ---------------- #
+        # ---------------- Save image using camera_organizer ---------------- #
         if not image_bytes:
-            try:
-                log_main("  Method 2: Calling get_media() as fallback...")
-                response = await cam.get_media()
-                if response.status == 200:
-                    image_bytes = await response.read()
-                    source = "get_media"
-                    log_main(f"  [OK] get_media returned {len(image_bytes)} bytes")
-                else:
-                    log_main(f"  [FAIL] get_media returned non-200: {response.status}")
-            except Exception as e:
-                log_main(f"  [FAIL] get_media error: {type(e).__name__}: {e}")
-
-        # ---------------- Method 3: Placeholder if both fail ---------------- #
-        if not image_bytes:
-            img_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_placeholder.jpg"
-            img_path = cam_folder / img_name
+            # Placeholder if method fails
             placeholder = Image.new("RGB", (640, 480), color=(255, 0, 0))
-            placeholder.save(img_path)
-            log_main(f"  [FAIL] No image data, saved placeholder")
-        else:
-            img_name = f"{normalize_camera_name(cam_name)}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-            img_path = cam_folder / img_name
-            try:
-                with open(img_path, "wb") as f:
-                    f.write(image_bytes)
-                log_main(f"  [SUCCESS] Saved {img_name} ({source}, {len(image_bytes)} bytes)")
-            except Exception as e:
-                log_main(f"  [FAIL] Error saving image: {e}")
-                img_name = "error_" + img_name
+            from io import BytesIO
+            buffer = BytesIO()
+            placeholder.save(buffer, format='JPEG')
+            image_bytes = buffer.getvalue()
+            source = "placeholder"
+            log_main(f"  [FAIL] No image data, using placeholder")
 
-        trim_images(cam_folder)
+        try:
+            # Use camera_organizer to save photo to date folder
+            photo_path = camera_organizer.save_photo_to_date_folder(
+                cam_folder,
+                image_bytes,
+                cam_name,
+                datetime.now()
+            )
+            log_main(f"  [SUCCESS] Saved to {photo_path.parent.name}/{photo_path.name} ({source}, {len(image_bytes)} bytes)")
+        except Exception as e:
+            log_main(f"  [FAIL] Error saving image: {e}")
 
         # Log camera info to camera-specific log
         log_entry = (
-            f"Temp: {cam.temperature}°F | Battery: {cam.battery} | "
-            f"WiFi: {bars}/5 | Image: {img_name} | Source: {source}  "
-            # f"Motion Enabled: {getattr(cam, 'motion_enabled', 'N/A')}"
+            f"Temp: {cam.temperature}\u00B0F | Battery: {cam.battery} | "
+            f"WiFi: {bars}/5 | Source: {source}"
         )
         log_camera(cam_name, log_entry)
 
         print(f"\n--- {cam_name} ---")
-        print(f"Temperature: {cam.temperature}°F")
+        print(f"Temperature: {cam.temperature}\u00B0F")
         print(f"Battery: {cam.battery}")
         print(f"WiFi: {bars}/5")
-        print(f"Image: {img_name} ({source})")
+        print(f"Source: {source}")
         print("----------------------\n")
+
+    # Cleanup old day folders after taking snapshots
+    log_main("Cleaning up old day folders...")
+    cleanup_stats = camera_organizer.cleanup_all_cameras()
+    if cleanup_stats:
+        log_main(f"Cleanup complete: {len(cleanup_stats)} camera(s) cleaned")
 
 
 # ---------------- Main Blink Polling ---------------- #
@@ -294,7 +292,7 @@ async def poll_blink():
     async with ClientSession() as session:
         blink = Blink(session=session)
 
-        # Extract the region code from the host URL (e.g., "u044" from "https://rest-u044.immedia-semi.com")
+        # Extract the region code from the host URL
         host_url = token_data.get("host", "")
         region_id = host_url.replace("https://rest-", "").replace(".immedia-semi.com", "")
 
@@ -310,7 +308,7 @@ async def poll_blink():
         blink.auth.account_id = token_data.get("account_id")
         blink.auth.user_id = token_data.get("user_id")
 
-        # Initialize the URLs handler with just the region_id (e.g., "u044")
+        # Initialize the URLs handler with just the region_id
         blink.urls = BlinkURLHandler(region_id)
 
         try:
@@ -335,6 +333,10 @@ async def poll_blink():
 
         # Start log rotation monitoring thread
         log_rotator.start_midnight_rotation_thread()
+
+        # Migrate any flat photos to date folders (one-time on startup)
+        log_main("Checking for photos to migrate to date folders...")
+        camera_organizer.migrate_all_cameras()
 
         # Startup snapshot
         await take_snapshot(blink)
@@ -385,6 +387,7 @@ if __name__ == "__main__":
     LOG_FOLDER.mkdir(parents=True, exist_ok=True)
     log_main("Blink WebCam script started.")
     log_main(f"Log rotation enabled: keeps 5 days of history")
-    log_main(f"Main log: {MAIN_LOG_FILE}")
-    log_main(f"Token log: {TOKEN_LOG_FILE}")
+    log_main(f"Photo retention: keeps {MAX_DAYS} days of photos per camera")
+    log_main(f"Main log: {get_current_log_file(MAIN_LOG_FOLDER, 'main')}")
+    log_main(f"Token log: {get_current_log_file(TOKEN_LOG_FOLDER, 'token')}")
     asyncio.run(poll_blink())

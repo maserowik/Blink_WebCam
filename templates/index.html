@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>&#x1F3A5; Blink Camera Monitor</title>
+<title>Blink Camera Monitor</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 
@@ -24,6 +24,7 @@
     --alert-info: #4299e1;
     --armed-color: #48bb78;
     --disarmed-color: #f56565;
+    --snooze-bg: #9f7aea;
 }
 
 [data-theme="dark"] {
@@ -61,6 +62,242 @@ body {
     width: 100%;
     padding: clamp(8px, 2vw, 20px);
     box-sizing: border-box;
+}
+
+/* Snooze Modal */
+.snooze-modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.7);
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+}
+
+.snooze-modal.show {
+    display: flex;
+}
+
+.snooze-modal-content {
+    background: var(--card-bg);
+    color: var(--card-text);
+    border-radius: 15px;
+    padding: 30px;
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.snooze-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--stat-bg);
+}
+
+.snooze-modal-title {
+    font-size: 1.5em;
+    font-weight: bold;
+}
+
+.snooze-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    cursor: pointer;
+    color: var(--card-text);
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    transition: background 0.2s;
+}
+
+.snooze-modal-close:hover {
+    background: var(--stat-bg);
+}
+
+.snooze-camera-name {
+    font-size: 1.1em;
+    margin-bottom: 20px;
+    color: var(--card-subtext);
+}
+
+.snooze-status-display {
+    background: var(--snooze-bg);
+    color: white;
+    padding: 15px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    text-align: center;
+    font-weight: 500;
+}
+
+.snooze-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.snooze-option {
+    padding: 15px;
+    background: var(--stat-bg);
+    border: 2px solid transparent;
+    border-radius: 10px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+.snooze-option:hover {
+    background: var(--snooze-bg);
+    color: white;
+    transform: translateY(-2px);
+}
+
+.snooze-option.selected {
+    background: var(--snooze-bg);
+    color: white;
+    border-color: var(--snooze-bg);
+}
+
+.snooze-custom {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 2px solid var(--stat-bg);
+}
+
+.snooze-custom-label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 500;
+}
+
+.snooze-custom-input {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid var(--stat-bg);
+    border-radius: 8px;
+    font-size: 1em;
+    background: var(--stat-bg);
+    color: var(--card-text);
+}
+
+.snooze-custom-input:focus {
+    outline: none;
+    border-color: var(--snooze-bg);
+}
+
+.snooze-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.snooze-btn {
+    flex: 1;
+    padding: 15px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1em;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.snooze-btn-primary {
+    background: var(--snooze-bg);
+    color: white;
+}
+
+.snooze-btn-primary:hover {
+    background: #805ad5;
+    transform: translateY(-2px);
+}
+
+.snooze-btn-secondary {
+    background: var(--stat-bg);
+    color: var(--card-text);
+}
+
+.snooze-btn-secondary:hover {
+    background: var(--card-subtext);
+    color: white;
+}
+
+.snooze-btn-cancel {
+    background: var(--alert-critical);
+    color: white;
+}
+
+.snooze-btn-cancel:hover {
+    background: #c53030;
+    transform: translateY(-2px);
+}
+
+.snooze-badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: var(--snooze-bg);
+    color: white;
+    padding: 5px 12px;
+    border-radius: 5px;
+    font-size: 0.8em;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    z-index: 10;
+    border: 2px solid white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.snooze-icon-btn {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    border: none;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.2em;
+    transition: all 0.2s;
+    z-index: 10;
+}
+
+.snooze-icon-btn:hover {
+    background: var(--snooze-bg);
+    transform: scale(1.1);
+}
+
+.snooze-icon-btn.active {
+    background: var(--snooze-bg);
 }
 
 /* Alert Banner */
@@ -300,6 +537,78 @@ h1 {
     opacity: 1;
 }
 
+/* Snooze All Toggle */
+.snooze-all-toggle {
+    position: relative;
+    width: clamp(80px, 12vw, 100px);
+    height: clamp(35px, 5vw, 40px);
+    border-radius: 30px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    background: #718096;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+}
+
+.snooze-all-toggle.snoozed {
+    background: var(--snooze-bg);
+}
+
+.snooze-all-toggle.loading {
+    opacity: 0.6;
+    cursor: not-allowed;
+    animation: pulse 1s infinite;
+}
+
+.snooze-all-toggle-slider {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: clamp(29px, 4.2vw, 34px);
+    height: clamp(29px, 4.2vw, 34px);
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: clamp(14px, 2.2vw, 18px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.snooze-all-toggle.snoozed .snooze-all-toggle-slider {
+    transform: translateX(clamp(45px, 7vw, 60px));
+}
+
+.snooze-all-toggle-label {
+    position: absolute;
+    font-size: clamp(9px, 1.6vw, 11px);
+    font-weight: bold;
+    color: white;
+    text-transform: uppercase;
+    transition: opacity 0.3s ease;
+}
+
+.snooze-all-toggle-label.active-label {
+    right: 6px;
+    opacity: 1;
+}
+
+.snooze-all-toggle-label.snoozed-label {
+    left: 6px;
+    opacity: 0;
+}
+
+.snooze-all-toggle.snoozed .snooze-all-toggle-label.active-label {
+    opacity: 0;
+}
+
+.snooze-all-toggle.snoozed .snooze-all-toggle-label.snoozed-label {
+    opacity: 1;
+}
+
 /* Theme Toggle */
 .theme-toggle {
     position: relative;
@@ -418,6 +727,10 @@ h1 {
 .camera-card.offline {
     opacity: 0.6;
     border: 3px solid var(--alert-critical);
+}
+
+.camera-card.snoozed {
+    opacity: 0.85;
 }
 
 .camera-header {
@@ -658,6 +971,10 @@ footer {
     .alert-item {
         padding: 12px 15px;
     }
+
+    .snooze-options {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media(max-width: 480px){
@@ -691,13 +1008,74 @@ footer {
 </head>
 <body>
 
+<!-- Snooze Modal -->
+<div class="snooze-modal" id="snooze-modal">
+    <div class="snooze-modal-content">
+        <div class="snooze-modal-header">
+            <div class="snooze-modal-title">Snooze Alerts</div>
+            <button class="snooze-modal-close" onclick="closeSnoozeModal()">\u00D7</button>
+        </div>
+        <div class="snooze-camera-name" id="snooze-camera-display"></div>
+
+        <!-- Current snooze status (shown when already snoozed) -->
+        <div class="snooze-status-display" id="snooze-status-display" style="display:none;">
+            Currently snoozed until <span id="snooze-expiry-time"></span>
+        </div>
+
+        <div class="snooze-options" id="snooze-options">
+            <div class="snooze-option" data-minutes="30">30 min</div>
+            <div class="snooze-option" data-minutes="60">1 hour</div>
+            <div class="snooze-option" data-minutes="120">2 hours</div>
+            <div class="snooze-option" data-minutes="180">3 hours</div>
+            <div class="snooze-option" data-minutes="240">4 hours</div>
+        </div>
+        <div class="snooze-custom">
+            <label class="snooze-custom-label">Or enter custom duration (minutes):</label>
+            <input type="number" class="snooze-custom-input" id="snooze-custom-input"
+                   placeholder="e.g., 90" min="1">
+        </div>
+        <div class="snooze-actions">
+            <button class="snooze-btn snooze-btn-secondary" onclick="closeSnoozeModal()">Cancel</button>
+            <button class="snooze-btn snooze-btn-cancel" id="snooze-cancel-btn" onclick="cancelSnooze()" style="display:none;">Remove Snooze</button>
+            <button class="snooze-btn snooze-btn-primary" id="snooze-apply-btn" onclick="applySnooze()">Apply Snooze</button>
+        </div>
+    </div>
+</div>
+
+<!-- Global Snooze All Modal -->
+<div class="snooze-modal" id="snooze-all-modal">
+    <div class="snooze-modal-content">
+        <div class="snooze-modal-header">
+            <div class="snooze-modal-title">Snooze All Cameras</div>
+            <button class="snooze-modal-close" onclick="closeSnoozeAllModal()">\u00D7</button>
+        </div>
+
+        <div class="snooze-options" id="snooze-all-options">
+            <div class="snooze-option" data-minutes="30">30 min</div>
+            <div class="snooze-option" data-minutes="60">1 hour</div>
+            <div class="snooze-option" data-minutes="120">2 hours</div>
+            <div class="snooze-option" data-minutes="180">3 hours</div>
+            <div class="snooze-option" data-minutes="240">4 hours</div>
+        </div>
+        <div class="snooze-custom">
+            <label class="snooze-custom-label">Or enter custom duration (minutes):</label>
+            <input type="number" class="snooze-custom-input" id="snooze-all-custom-input"
+                   placeholder="e.g., 90" min="1">
+        </div>
+        <div class="snooze-actions">
+            <button class="snooze-btn snooze-btn-secondary" onclick="closeSnoozeAllModal()">Cancel</button>
+            <button class="snooze-btn snooze-btn-primary" onclick="applySnoozeAll()">Snooze All</button>
+        </div>
+    </div>
+</div>
+
 <!-- Alert Banner -->
 <div class="alert-banner" id="alert-banner"></div>
 
 <div class="container">
 <header>
     <div class="header-left">
-        <h1>&#x1F3A5; Blink Camera Monitor</h1>
+        <h1>Blink Camera Monitor</h1>
         <p class="subtitle">Real-time camera surveillance dashboard</p>
         <p class="timestamp">
             <span class="status-indicator"></span>
@@ -707,7 +1085,7 @@ footer {
     <div class="header-right">
         <div class="windy-widget" id="windy-widget">
             <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--card-text);padding:20px;text-align:center;">
-                &#x1F310; Loading radar map...
+                Loading radar map...
             </div>
         </div>
         <div class="weather-widget" id="weather-widget">
@@ -720,6 +1098,13 @@ footer {
             <span class="arm-toggle-label armed-label">Armed</span>
             <span class="arm-toggle-label disarmed-label">Disarm</span>
         </div>
+        <div class="snooze-all-toggle {% if all_snoozed %}snoozed{% endif %}" id="snooze-all-toggle" onclick="toggleSnoozeAll()">
+            <div class="snooze-all-toggle-slider">
+                <span id="snooze-all-icon">&#x1F515;</span>
+            </div>
+            <span class="snooze-all-toggle-label snoozed-label">Snooze</span>
+            <span class="snooze-all-toggle-label active-label">Active</span>
+        </div>
         <div class="theme-toggle" onclick="toggleTheme()">
             <div class="theme-toggle-slider">
                 <span id="theme-icon">&#x2600;&#xFE0F;</span>
@@ -731,7 +1116,8 @@ footer {
 {% if cameras %}
 <div class="camera-grid">
     {% for camera in cameras %}
-    <div class="camera-card {% if camera.images|length == 0 %}offline{% endif %}" data-camera="{{ camera.normalized_name }}">
+    <div class="camera-card {% if camera.images|length == 0 %}offline{% endif %} {% if camera.snooze_status.is_snoozed %}snoozed{% endif %}"
+         data-camera="{{ camera.normalized_name }}">
         <div class="camera-header">
             {% if camera.images|length == 0 %}
             <div class="offline-badge">OFFLINE</div>
@@ -741,6 +1127,21 @@ footer {
         </div>
 
         <div class="camera-image-container">
+            <!-- Snooze Badge -->
+            {% if camera.snooze_status.is_snoozed %}
+            <div class="snooze-badge" id="snooze-badge-{{ camera.normalized_name }}">
+                &#x1F515; Until {{ camera.snooze_status.snooze_until_full }}
+            </div>
+            {% endif %}
+
+            <!-- Snooze Button -->
+            <button class="snooze-icon-btn {% if camera.snooze_status.is_snoozed %}active{% endif %}"
+                    id="snooze-btn-{{ camera.normalized_name }}"
+                    onclick="openSnoozeModal('{{ camera.normalized_name }}', '{{ camera.name }}')"
+                    title="{% if camera.snooze_status.is_snoozed %}Manage snooze{% else %}Snooze alerts{% endif %}">
+                &#x1F515;
+            </button>
+
             {% if camera.images %}
                 {% for image in camera.images %}
                 <img src="/image/{{ camera.normalized_name }}/{{ image }}"
@@ -802,7 +1203,7 @@ footer {
 {% endif %}
 
 <footer>
-    &#x1F504; Updates every 5 min | Cycles every 3 sec
+    Updates every 5 min | Cycles every 3 sec
 </footer>
 </div>
 
@@ -813,54 +1214,398 @@ footer {
     document.body.setAttribute('data-theme', savedTheme);
 })();
 
+// Load saved arm state immediately (before page renders)
+(function() {
+    const savedArmState = localStorage.getItem('armState');
+    if (savedArmState === 'armed') {
+        document.addEventListener('DOMContentLoaded', function() {
+            const toggle = document.getElementById('arm-toggle');
+            const icon = document.getElementById('arm-icon');
+            if (toggle && icon) {
+                toggle.classList.add('armed');
+                icon.innerHTML = '&#x1F6E1;&#xFE0F;';
+            }
+        });
+    }
+})();
+
 // Configuration
-const TEMP_HOT_THRESHOLD = 113; // °F
-const TEMP_COLD_THRESHOLD = -4; // °F
-const BATTERY_LOW_THRESHOLD = 20; // %
+const TEMP_HOT_THRESHOLD = 113; // degrees F
+const TEMP_COLD_THRESHOLD = -4; // degrees F
+const BATTERY_LOW_THRESHOLD = 20; // percent
 
-// Alert management
-const alerts = new Map();
+// Snooze Modal State
+let currentSnoozeCamera = null;
+let currentSnoozeCameraDisplay = null;
+let selectedSnoozeDuration = null;
+let currentSnoozeStatus = null;
+let selectedSnoozeAllDuration = null;
 
-function showAlert(id, type, icon, title, message) {
-    if (alerts.has(id)) return;
+async function openSnoozeModal(cameraName, cameraDisplay) {
+    currentSnoozeCamera = cameraName;
+    currentSnoozeCameraDisplay = cameraDisplay;
+    selectedSnoozeDuration = null;
 
-    const banner = document.getElementById('alert-banner');
-    const alertItem = document.createElement('div');
-    alertItem.className = `alert-item ${type}`;
-    alertItem.dataset.alertId = id;
+    document.getElementById('snooze-camera-display').textContent = `Camera: ${cameraDisplay}`;
+    document.getElementById('snooze-custom-input').value = '';
 
-    alertItem.innerHTML = `
-        <div class="alert-content">
-            <div class="alert-icon">${icon}</div>
-            <div class="alert-text">
-                <div class="alert-title">${title}</div>
-                <div class="alert-message">${message}</div>
-            </div>
-        </div>
-        <button class="alert-close" onclick="dismissAlert('${id}')">&#x2715;</button>
-    `;
+    // Clear all selections
+    document.querySelectorAll('#snooze-options .snooze-option').forEach(opt => {
+        opt.classList.remove('selected');
+    });
 
-    banner.appendChild(alertItem);
-    banner.classList.add('show');
-    document.body.classList.add('has-alerts');
-    alerts.set(id, alertItem);
+    // Check current snooze status
+    try {
+        const response = await fetch(`/api/snooze/status/${cameraName}`);
+        const status = await response.json();
+        currentSnoozeStatus = status;
+
+        if (status.is_snoozed) {
+            // Show current snooze status with FULL date and time
+            document.getElementById('snooze-expiry-time').textContent = status.snooze_until_full;
+            document.getElementById('snooze-status-display').style.display = 'block';
+            document.getElementById('snooze-cancel-btn').style.display = 'block';
+        } else {
+            document.getElementById('snooze-status-display').style.display = 'none';
+            document.getElementById('snooze-cancel-btn').style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error fetching snooze status:', error);
+        document.getElementById('snooze-status-display').style.display = 'none';
+        document.getElementById('snooze-cancel-btn').style.display = 'none';
+    }
+
+    document.getElementById('snooze-modal').classList.add('show');
 }
 
-function dismissAlert(id) {
-    const alertItem = alerts.get(id);
-    if (alertItem) {
-        alertItem.style.animation = 'slideDown 0.3s ease-out reverse';
-        setTimeout(() => {
-            alertItem.remove();
-            alerts.delete(id);
+function closeSnoozeModal() {
+    document.getElementById('snooze-modal').classList.remove('show');
+    currentSnoozeCamera = null;
+    currentSnoozeCameraDisplay = null;
+    selectedSnoozeDuration = null;
+    currentSnoozeStatus = null;
+}
 
-            if (alerts.size === 0) {
-                document.getElementById('alert-banner').classList.remove('show');
-                document.body.classList.remove('has-alerts');
-            }
-        }, 300);
+async function openSnoozeAllModal() {
+    selectedSnoozeAllDuration = null;
+    document.getElementById('snooze-all-custom-input').value = '';
+    
+    // Clear all selections
+    document.querySelectorAll('#snooze-all-options .snooze-option').forEach(opt => {
+        opt.classList.remove('selected');
+    });
+    
+    document.getElementById('snooze-all-modal').classList.add('show');
+}
+
+function closeSnoozeAllModal() {
+    document.getElementById('snooze-all-modal').classList.remove('show');
+    selectedSnoozeAllDuration = null;
+}
+
+// Snooze option selection
+document.querySelectorAll('#snooze-options .snooze-option').forEach(option => {
+    option.addEventListener('click', function() {
+        // Clear all selections
+        document.querySelectorAll('#snooze-options .snooze-option').forEach(opt => {
+            opt.classList.remove('selected');
+        });
+
+        // Select this option
+        this.classList.add('selected');
+        selectedSnoozeDuration = parseInt(this.dataset.minutes);
+
+        // Clear custom input
+        document.getElementById('snooze-custom-input').value = '';
+    });
+});
+
+// Snooze All option selection
+document.querySelectorAll('#snooze-all-options .snooze-option').forEach(option => {
+    option.addEventListener('click', function() {
+        // Clear all selections
+        document.querySelectorAll('#snooze-all-options .snooze-option').forEach(opt => {
+            opt.classList.remove('selected');
+        });
+
+        // Select this option
+        this.classList.add('selected');
+        selectedSnoozeAllDuration = parseInt(this.dataset.minutes);
+
+        // Clear custom input
+        document.getElementById('snooze-all-custom-input').value = '';
+    });
+});
+
+// Custom input handling
+document.getElementById('snooze-custom-input').addEventListener('input', function() {
+    // Clear preset selections when typing
+    document.querySelectorAll('#snooze-options .snooze-option').forEach(opt => {
+        opt.classList.remove('selected');
+    });
+    selectedSnoozeDuration = null;
+});
+
+document.getElementById('snooze-all-custom-input').addEventListener('input', function() {
+    // Clear preset selections when typing
+    document.querySelectorAll('#snooze-all-options .snooze-option').forEach(opt => {
+        opt.classList.remove('selected');
+    });
+    selectedSnoozeAllDuration = null;
+});
+
+async function applySnooze() {
+    if (!currentSnoozeCamera) return;
+
+    // Get duration from selected option or custom input
+    let duration = selectedSnoozeDuration;
+    if (!duration) {
+        const customValue = parseInt(document.getElementById('snooze-custom-input').value);
+        if (customValue && customValue > 0) {
+            duration = customValue;
+        }
+    }
+
+    if (!duration) {
+        alert('Please select a snooze duration');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/snooze/set', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                camera_name: currentSnoozeCamera,
+                duration_minutes: duration
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            console.log(`Snoozed ${currentSnoozeCamera} for ${duration} minutes`);
+            closeSnoozeModal();
+
+            // Refresh page to show snooze badge
+            setTimeout(() => {
+                location.reload();
+            }, 500);
+        } else {
+            alert('Failed to apply snooze: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error applying snooze:', error);
+        alert('Error communicating with server');
     }
 }
+
+async function applySnoozeAll() {
+    // Get duration from selected option or custom input
+    let duration = selectedSnoozeAllDuration;
+    if (!duration) {
+        const customValue = parseInt(document.getElementById('snooze-all-custom-input').value);
+        if (customValue && customValue > 0) {
+            duration = customValue;
+        }
+    }
+
+    if (!duration) {
+        alert('Please select a snooze duration');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/snooze/all/set', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                duration_minutes: duration
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            console.log(`Snoozed all ${result.count} cameras for ${duration} minutes`);
+            closeSnoozeAllModal();
+
+            // Refresh page to show snooze badges
+            setTimeout(() => {
+                location.reload();
+            }, 500);
+        } else {
+            alert('Failed to snooze all cameras: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error snoozing all cameras:', error);
+        alert('Error communicating with server');
+    }
+}
+
+async function cancelSnooze() {
+    if (!currentSnoozeCamera) return;
+
+    if (!confirm(`Remove snooze for ${currentSnoozeCameraDisplay}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/snooze/unset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                camera_name: currentSnoozeCamera
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            console.log(`Removed snooze for ${currentSnoozeCamera}`);
+            closeSnoozeModal();
+
+            // Update UI immediately without reload
+            const card = document.querySelector(`.camera-card[data-camera="${currentSnoozeCamera}"]`);
+            const badge = document.getElementById(`snooze-badge-${currentSnoozeCamera}`);
+            const btn = document.getElementById(`snooze-btn-${currentSnoozeCamera}`);
+
+            if (badge) badge.remove();
+            if (btn) btn.classList.remove("active");
+            if (card) card.classList.remove("snoozed");
+
+            // Check if all cameras are now unsnoozed
+            await loadSnoozeAllStatus();
+
+        } else {
+            alert('Failed to remove snooze: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        console.error('Error removing snooze:', error);
+        alert('Error communicating with server');
+    }
+}
+
+// Snooze All Toggle
+let isTogglingSnoozeAll = false;
+
+async function toggleSnoozeAll() {
+    if (isTogglingSnoozeAll) return;
+
+    const toggle = document.getElementById('snooze-all-toggle');
+    const isSnoozed = toggle.classList.contains('snoozed');
+
+    if (isSnoozed) {
+        // Unsnooze all cameras
+        if (!confirm('Remove snooze from all cameras?')) {
+            return;
+        }
+
+        isTogglingSnoozeAll = true;
+        toggle.classList.add('loading');
+
+        try {
+            const response = await fetch('/api/snooze/all/unset', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'}
+            });
+
+            const result = await response.json();
+
+            if (result.success) {
+                console.log('Unsnoozed all cameras');
+                location.reload();
+            } else {
+                alert('Failed to unsnooze all cameras: ' + (result.error || 'Unknown error'));
+            }
+        } catch (error) {
+            console.error('Error unsnoozing all cameras:', error);
+            alert('Error communicating with server');
+        } finally {
+            toggle.classList.remove('loading');
+            isTogglingSnoozeAll = false;
+        }
+    } else {
+        // Open snooze all modal
+        openSnoozeAllModal();
+    }
+}
+
+async function loadSnoozeAllStatus() {
+    try {
+        const response = await fetch('/api/snooze/all/status');
+        const data = await response.json();
+
+        if (data.success) {
+            const toggle = document.getElementById('snooze-all-toggle');
+            const icon = document.getElementById('snooze-all-icon');
+
+            if (data.all_snoozed) {
+                toggle.classList.add('snoozed');
+            } else {
+                toggle.classList.remove('snoozed');
+            }
+        }
+    } catch (error) {
+        console.error('Error loading snooze all status:', error);
+    }
+}
+
+// Auto-clean expired snoozes on page load
+async function cleanupExpiredSnoozes() {
+    try {
+        await fetch('/api/snooze/cleanup', { method: 'POST' });
+        console.log('Expired snoozes cleaned up');
+    } catch (error) {
+        console.error('Error cleaning up snoozes:', error);
+    }
+}
+
+// AUTO-REFRESH SNOOZE STATUS (every camera, no page reload)
+async function refreshSnoozeBadges() {
+    const cards = document.querySelectorAll('.camera-card');
+
+    for (const card of cards) {
+        const cam = card.dataset.camera;
+        const badge = document.getElementById(`snooze-badge-${cam}`);
+        const btn = document.getElementById(`snooze-btn-${cam}`);
+
+        try {
+            const res = await fetch(`/api/snooze/status/${cam}`);
+            const status = await res.json();
+
+            if (status.is_snoozed) {
+                // Update snooze badge if it exists
+                if (badge) {
+                    badge.innerHTML = '&#x1F515; Until ' + status.snooze_until_full;
+                }
+
+                if (btn) btn.classList.add("active");
+                card.classList.add("snoozed");
+            } else {
+                // Snooze expired — remove UI indicators
+                if (badge) badge.remove();
+                if (btn) btn.classList.remove("active");
+                card.classList.remove("snoozed");
+            }
+
+        } catch (e) {
+            console.error("Error refreshing snooze status:", e);
+        }
+    }
+    
+    // Also refresh global snooze all status
+    await loadSnoozeAllStatus();
+}
+
+// Check snooze expiration every 20 seconds
+setInterval(refreshSnoozeBadges, 20000);
+
+// Run cleanup on page load
+cleanupExpiredSnoozes();
+
+// Alert management (disabled - only visual indicators)
+const alerts = new Map();
 
 function parseTemperature(tempStr) {
     if (!tempStr || tempStr === 'N/A') return null;
@@ -881,10 +1626,6 @@ function parseBattery(batteryStr) {
     return match ? parseInt(match[1]) : null;
 }
 
-function checkCameraAlerts() {
-    // Alert checking disabled - only show visual indicators on camera cards
-}
-
 // Arm/Disarm Toggle
 let isTogglingArm = false;
 
@@ -899,10 +1640,12 @@ async function loadArmStatus() {
 
             if (data.armed) {
                 toggle.classList.add('armed');
-                icon.innerHTML = '&#x1F6E1;&#xFE0F;'; // Shield
+                icon.innerHTML = '&#x1F6E1;&#xFE0F;';
+                localStorage.setItem('armState', 'armed');
             } else {
                 toggle.classList.remove('armed');
-                icon.innerHTML = '&#x1F513;'; // Unlocked
+                icon.innerHTML = '&#x1F513;';
+                localStorage.setItem('armState', 'disarmed');
             }
         }
     } catch (error) {
@@ -932,11 +1675,13 @@ async function toggleArm() {
         if (result.success) {
             if (result.armed) {
                 toggle.classList.add('armed');
-                icon.innerHTML = '&#x1F6E1;&#xFE0F;'; // Shield
+                icon.innerHTML = '&#x1F6E1;&#xFE0F;';
+                localStorage.setItem('armState', 'armed');
                 console.log('System ARMED');
             } else {
                 toggle.classList.remove('armed');
-                icon.innerHTML = '&#x1F513;'; // Unlocked
+                icon.innerHTML = '&#x1F513;';
+                localStorage.setItem('armState', 'disarmed');
                 console.log('System DISARMED');
             }
         } else {
@@ -989,7 +1734,7 @@ function checkBatteryLevels() {
             const valueDiv = statDiv.querySelector('.stat-value');
             if (valueDiv) {
                 const currentText = valueDiv.textContent.trim();
-                if (!currentText.includes('⚠')) {
+                if (!currentText.includes('\u26A0')) {
                     valueDiv.innerHTML = '&#x26A0;&#xFE0F; ' + currentText;
                 }
             }
@@ -1011,7 +1756,7 @@ function checkTemperatureLevels() {
                 statDiv.classList.add('alert');
                 if (valueDiv) {
                     const currentText = valueDiv.textContent.trim();
-                    if (!currentText.includes('🔥')) {
+                    if (!currentText.includes('\uD83D\uDD25')) {
                         valueDiv.innerHTML = '&#x1F525; ' + currentText;
                     }
                 }
@@ -1019,7 +1764,7 @@ function checkTemperatureLevels() {
                 statDiv.classList.add('alert');
                 if (valueDiv) {
                     const currentText = valueDiv.textContent.trim();
-                    if (!currentText.includes('❄')) {
+                    if (!currentText.includes('\u2744')) {
                         valueDiv.innerHTML = '&#x2744;&#xFE0F; ' + currentText;
                     }
                 }
@@ -1108,13 +1853,12 @@ Object.keys(cameras).forEach(cameraName => {
 const WEATHER_LOCATION = "{{ location.display if location else 'Bethel Park, PA' }}";
 const WEATHER_CITY = "{{ location.city if location else 'Bethel Park' }}";
 const WEATHER_STATE = "{{ location.state if location else 'PA' }}";
-const WEATHER_LAT = {{ location.lat if location else 40.3267 }};
-const WEATHER_LON = {{ location.lon if location else -80.0171 }};
+const WEATHER_LAT = "{{ location.lat | default(40.3267) }}";
+const WEATHER_LON = "{{ location.lon | default(-80.0171) }}";
 
 async function fetchWeather(){
     const widget=document.getElementById('weather-widget');
     try{
-        // Use local backend proxy instead of direct wttr.in call (avoids CORS)
         const resp=await fetch('/api/weather', {
             method: 'GET',
             headers: {
@@ -1157,8 +1901,8 @@ async function fetchWeather(){
             <div class="weather-main">
                 <div class="weather-icon">${icon}</div>
                 <div>
-                    <div class="weather-temp">${tempF}°F</div>
-                    <div class="weather-details">Feels ${feelsLike}°F</div>
+                    <div class="weather-temp">${tempF}\u00B0F</div>
+                    <div class="weather-details">Feels ${feelsLike}\u00B0F</div>
                 </div>
             </div>
             <div class="weather-details">
@@ -1173,7 +1917,7 @@ async function fetchWeather(){
             <div class="weather-main">
                 <div class="weather-icon">&#x1F321;&#xFE0F;</div>
                 <div>
-                    <div class="weather-temp">--°F</div>
+                    <div class="weather-temp">--&#xB0;F</div>
                     <div class="weather-details">Service unavailable</div>
                 </div>
             </div>
@@ -1193,18 +1937,18 @@ function loadWindyRadar(){
 }
 
 loadWindyRadar();
+setInterval(() => {
+    loadWindyRadar();
+}, 60000);
 fetchWeather();
-// Refresh weather every 15 minutes (instead of 10) to avoid rate limiting
 setInterval(fetchWeather, 900000);
 
-// Load arm status on page load and poll every 10 seconds for sync with Blink app
 loadArmStatus();
 setInterval(loadArmStatus, 10000);
 
-// Check for alerts on page load
-checkCameraAlerts();
+loadSnoozeAllStatus();
+setInterval(loadSnoozeAllStatus, 10000);
 
-// Refresh page every 5 min with smooth transition
 setInterval(()=>{
     document.body.style.transition = 'opacity 0.3s';
     document.body.style.opacity = '0.8';
