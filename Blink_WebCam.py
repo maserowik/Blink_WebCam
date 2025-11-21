@@ -10,6 +10,8 @@ import os
 import sys
 import warnings
 from PIL import Image
+import threading
+import time
 
 # Import the new log rotation module
 from log_rotation import LogRotator
@@ -174,6 +176,37 @@ def ensure_camera_folder(cam_name: str) -> Path:
     return cam_folder
 
 
+def schedule_midnight_cleanup():
+    """Run cleanup once per day at midnight"""
+    last_cleanup_date = datetime.now().date()
+
+    def cleanup_worker():
+        nonlocal last_cleanup_date
+        while True:
+            current_date = datetime.now().date()
+
+            # Check if it's a new day
+            if current_date > last_cleanup_date:
+                log_main("=" * 60)
+                log_main("MIDNIGHT CLEANUP - Cleaning up old day folders...")
+                log_main("=" * 60)
+                cleanup_stats = camera_organizer.cleanup_all_cameras()
+                if cleanup_stats:
+                    log_main(f"Cleanup complete: {len(cleanup_stats)} camera(s) cleaned")
+                else:
+                    log_main("No old folders to cleanup")
+                log_main("=" * 60)
+                last_cleanup_date = current_date
+
+            # Check every minute
+            time.sleep(60)
+
+    thread = threading.Thread(target=cleanup_worker, daemon=True)
+    thread.start()
+    log_main("📅 Midnight cleanup scheduler started")
+    return thread
+
+
 async def countdown(seconds: int):
     for remaining in range(seconds, 0, -1):
         print(f"\rWaiting {remaining} seconds for next snapshot...", end="")
@@ -258,7 +291,8 @@ async def take_snapshot(blink):
                 cam_name,
                 datetime.now()
             )
-            log_main(f"  [SUCCESS] Saved to {photo_path.parent.name}/{photo_path.name} ({source}, {len(image_bytes)} bytes)")
+            log_main(
+                f"  [SUCCESS] Saved to {photo_path.parent.name}/{photo_path.name} ({source}, {len(image_bytes)} bytes)")
         except Exception as e:
             log_main(f"  [FAIL] Error saving image: {e}")
 
@@ -275,12 +309,6 @@ async def take_snapshot(blink):
         print(f"WiFi: {bars}/5")
         print(f"Source: {source}")
         print("----------------------\n")
-
-    # Cleanup old day folders after taking snapshots
-    log_main("Cleaning up old day folders...")
-    cleanup_stats = camera_organizer.cleanup_all_cameras()
-    if cleanup_stats:
-        log_main(f"Cleanup complete: {len(cleanup_stats)} camera(s) cleaned")
 
 
 # ---------------- Main Blink Polling ---------------- #
@@ -333,6 +361,9 @@ async def poll_blink():
 
         # Start log rotation monitoring thread
         log_rotator.start_midnight_rotation_thread()
+
+        # Start midnight cleanup scheduler
+        schedule_midnight_cleanup()
 
         # Migrate any flat photos to date folders (one-time on startup)
         log_main("Checking for photos to migrate to date folders...")
