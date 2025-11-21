@@ -1134,9 +1134,11 @@ footer {
             <!-- Snooze Badge -->
            {% if camera.snooze_status.is_snoozed %}
             <div class="snooze-badge" id="snooze-badge-{{ camera.normalized_name }}" data-expiry="{{ camera.snooze_status.snooze_until }}">
-                 &#x1F515; <span id="snooze-countdown-{{ camera.normalized_name }}">{{ camera.snooze_status.minutes_remaining }}m left</span>
+                <div>&#x1F515; Until {{ camera.snooze_status.snooze_until_full }}</div>
+                <div id="snooze-countdown-{{ camera.normalized_name }}" style="font-size: 0.95em; font-weight: bold;">{{ camera.snooze_status.minutes_remaining }}m left</div>
             </div>
-             {% endif %}
+        {% endif %}
+
 
             <!-- Snooze Button -->
             <button class="snooze-icon-btn {% if camera.snooze_status.is_snoozed %}active{% endif %}"
@@ -1566,9 +1568,21 @@ async function refreshSnoozeBadges() {
             const status = await res.json();
 
             if (status.is_snoozed) {
-                // Update snooze badge if it exists
+                // Update snooze badge if it exists, or create it
                 if (badge) {
-                    badge.innerHTML = '&#x1F515; Until ' + status.snooze_until_full;
+                    // Just update the data-expiry attribute, don't replace HTML
+                    badge.dataset.expiry = status.snooze_until;
+                } else {
+                    // Create new badge with countdown
+                    const newBadge = document.createElement('div');
+                    newBadge.className = 'snooze-badge';
+                    newBadge.id = `snooze-badge-${cam}`;
+                    newBadge.dataset.expiry = status.snooze_until;
+                    newBadge.innerHTML = `
+                        &#x1F515; Until ${status.snooze_until_full}<br>
+                        <span id="snooze-countdown-${cam}" style="font-size: 0.9em;">${status.minutes_remaining}m left</span>
+                    `;
+                    card.querySelector('.camera-image-container').prepend(newBadge);
                 }
 
                 if (btn) btn.classList.add("active");
@@ -1584,7 +1598,7 @@ async function refreshSnoozeBadges() {
             console.error("Error refreshing snooze status:", e);
         }
     }
-    
+
     // Also refresh global snooze all status
     await loadSnoozeAllStatus();
 }
