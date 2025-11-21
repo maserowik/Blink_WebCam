@@ -123,7 +123,7 @@ body {
     border: none;
     font-size: 1.5em;
     cursor: pointer;
-    color: var(--card-text);
+    color: #e53e33;
     padding: 0;
     width: 30px;
     height: 30px;
@@ -132,10 +132,12 @@ body {
     justify-content: center;
     border-radius: 5px;
     transition: background 0.2s;
+    font-wight: blod;
 }
 
 .snooze-modal-close:hover {
     background: var(--stat-bg);
+    color: #c53030;
 }
 
 .snooze-camera-name {
@@ -282,7 +284,7 @@ body {
     right: 10px;
     background: rgba(0,0,0,0.6);
     color: white;
-    border: none;
+    border: 2px solid white;
     padding: 8px 12px;
     border-radius: 8px;
     cursor: pointer;
@@ -294,10 +296,12 @@ body {
 .snooze-icon-btn:hover {
     background: var(--snooze-bg);
     transform: scale(1.1);
+    border-color: white;
 }
 
 .snooze-icon-btn.active {
     background: var(--snooze-bg);
+    border-color: white;
 }
 
 /* Alert Banner */
@@ -592,21 +596,21 @@ h1 {
 }
 
 .snooze-all-toggle-label.active-label {
-    right: 6px;
-    opacity: 1;
-}
-
-.snooze-all-toggle-label.snoozed-label {
     left: 6px;
     opacity: 0;
 }
 
+.snooze-all-toggle-label.snoozed-label {
+    right: 6px;
+    opacity: 1;
+}
+
 .snooze-all-toggle.snoozed .snooze-all-toggle-label.active-label {
-    opacity: 0;
+    opacity: 1;
 }
 
 .snooze-all-toggle.snoozed .snooze-all-toggle-label.snoozed-label {
-    opacity: 1;
+    opacity: 0;
 }
 
 /* Theme Toggle */
@@ -1013,7 +1017,7 @@ footer {
     <div class="snooze-modal-content">
         <div class="snooze-modal-header">
             <div class="snooze-modal-title">Snooze Alerts</div>
-            <button class="snooze-modal-close" onclick="closeSnoozeModal()">\u00D7</button>
+            <button class="snooze-modal-close" onclick="closeSnoozeModal()">X</button>
         </div>
         <div class="snooze-camera-name" id="snooze-camera-display"></div>
 
@@ -1047,7 +1051,7 @@ footer {
     <div class="snooze-modal-content">
         <div class="snooze-modal-header">
             <div class="snooze-modal-title">Snooze All Cameras</div>
-            <button class="snooze-modal-close" onclick="closeSnoozeAllModal()">\u00D7</button>
+            <button class="snooze-modal-close" onclick="closeSnoozeAllModal()">X</button>
         </div>
 
         <div class="snooze-options" id="snooze-all-options">
@@ -1464,19 +1468,7 @@ async function cancelSnooze() {
         if (result.success) {
             console.log(`Removed snooze for ${currentSnoozeCamera}`);
             closeSnoozeModal();
-
-            // Update UI immediately without reload
-            const card = document.querySelector(`.camera-card[data-camera="${currentSnoozeCamera}"]`);
-            const badge = document.getElementById(`snooze-badge-${currentSnoozeCamera}`);
-            const btn = document.getElementById(`snooze-btn-${currentSnoozeCamera}`);
-
-            if (badge) badge.remove();
-            if (btn) btn.classList.remove("active");
-            if (card) card.classList.remove("snoozed");
-
-            // Check if all cameras are now unsnoozed
-            await loadSnoozeAllStatus();
-
+            location.reload();
         } else {
             alert('Failed to remove snooze: ' + (result.error || 'Unknown error'));
         }
@@ -1485,7 +1477,6 @@ async function cancelSnooze() {
         alert('Error communicating with server');
     }
 }
-
 // Snooze All Toggle
 let isTogglingSnoozeAll = false;
 
