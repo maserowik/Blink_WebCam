@@ -357,6 +357,7 @@ async def poll_blink():
             log_main(traceback.format_exc())
             return
 
+        # Track token file modification time
         last_token_mtime = os.path.getmtime(TOKEN_FILE)
 
         # Start log rotation monitoring thread
@@ -370,17 +371,22 @@ async def poll_blink():
         camera_organizer.migrate_all_cameras()
 
         # Startup snapshot
+        log_main("Taking initial startup snapshot...")
         await take_snapshot(blink)
         await wait_until_next_interval(POLL_INTERVAL)
 
         while True:
             try:
-                # Check if token was updated
+                # STEP 1: Refresh blink connection and save token
+                await blink.refresh(force=True)
+                await blink.save(TOKEN_FILE)
+
+                # STEP 2: Check if token file was externally modified
                 current_token_mtime = os.path.getmtime(TOKEN_FILE)
                 if current_token_mtime != last_token_mtime:
                     last_token_mtime = current_token_mtime
 
-                    # Load the refreshed token to get details
+                    # Load the refreshed token to log details
                     with open(TOKEN_FILE, "r") as f:
                         refreshed_token = json.load(f)
 
@@ -390,7 +396,7 @@ async def poll_blink():
                     log_token(f"  Account ID: {refreshed_token.get('account_id')}")
                     log_token(f"  Region: {refreshed_token.get('host')}")
 
-                    # CRITICAL: Re-initialize camera objects after token refresh
+                    # Re-initialize camera objects after token refresh
                     log_token(f"  Re-initializing camera objects after token refresh...")
                     try:
                         await blink.setup_post_verify()
@@ -398,11 +404,11 @@ async def poll_blink():
                     except Exception as e:
                         log_token(f"  ERROR re-initializing cameras: {e}")
 
-                # Refresh and save token
-                await blink.refresh(force=True)
-                await blink.save(TOKEN_FILE)
-
+                # STEP 3: Take snapshot (THIS WAS MISSING!)
+                log_main("Starting snapshot cycle...")
                 await take_snapshot(blink)
+
+                # STEP 4: Wait for next interval
                 await wait_until_next_interval(POLL_INTERVAL)
 
             except Exception as e:
