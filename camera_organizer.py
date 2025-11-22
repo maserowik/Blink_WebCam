@@ -210,7 +210,7 @@ class CameraOrganizer:
                 migrated += 1
 
             except Exception as e:
-                print(f"  ⚠️  Error migrating {photo.name}: {e}")
+                print(f"  \u26A0\uFE0F Error migrating {photo.name}: {e}")
                 errors += 1
 
         return {
@@ -317,40 +317,40 @@ if __name__ == "__main__":
         if command == "--migrate":
             # Migrate flat photos to date folders
             print("=" * 60)
-            print("📦 MIGRATING PHOTOS TO DATE FOLDERS")
+            print("\U0001F4E6 MIGRATING PHOTOS TO DATE FOLDERS")
             print("=" * 60)
 
             stats = organizer.migrate_all_cameras()
 
             if not stats:
-                print("\nℹ️  No photos to migrate")
+                print("\n\u2139\uFE0F No photos to migrate")
             else:
                 for result in stats:
-                    print(f"\n📹 {result['camera']}")
-                    print(f"  ✅ Migrated: {result['migrated']} photos")
+                    print(f"\n\U0001F4F9 {result['camera']}")
+                    print(f"  \u2705 Migrated: {result['migrated']} photos")
                     if result['errors'] > 0:
-                        print(f"  ⚠️  Errors: {result['errors']}")
+                        print(f"  \u26A0\uFE0F Errors: {result['errors']}")
 
             print("\n" + "=" * 60)
 
         elif command == "--cleanup":
             # Cleanup old photos
             print("=" * 60)
-            print(f"🧹 CLEANING UP PHOTOS OLDER THAN {MAX_DAYS} DAYS")
+            print(f"\U0001F9F9 CLEANING UP PHOTOS OLDER THAN {MAX_DAYS} DAYS")
             print("=" * 60)
 
             stats = organizer.cleanup_all_cameras()
 
             if not stats:
-                print("\nℹ️  No old photos to cleanup")
+                print("\n\u2139\uFE0F No old photos to cleanup")
             else:
                 total_folders = 0
                 total_photos = 0
 
                 for result in stats:
-                    print(f"\n📹 {result['camera']}")
-                    print(f"  🗑️  Deleted: {result['deleted_folders']} folder(s)")
-                    print(f"  🗑️  Deleted: {result['deleted_photos']} photo(s)")
+                    print(f"\n\U0001F4F9 {result['camera']}")
+                    print(f"  \U0001F5D1\uFE0F Deleted: {result['deleted_folders']} folder(s)")
+                    print(f"  \U0001F5D1\uFE0F Deleted: {result['deleted_photos']} photo(s)")
                     total_folders += result['deleted_folders']
                     total_photos += result['deleted_photos']
 
@@ -362,28 +362,28 @@ if __name__ == "__main__":
         elif command == "--stats":
             # Show camera statistics
             print("=" * 60)
-            print("📊 CAMERA STATISTICS")
+            print("\U0001F4CA CAMERA STATISTICS")
             print("=" * 60)
 
             stats = organizer.get_all_camera_stats()
 
             if not stats:
-                print("\nℹ️  No cameras found")
+                print("\n\u2139\uFE0F No cameras found")
             else:
                 for camera_stats in stats:
-                    print(f"\n📹 {camera_stats['camera']}")
-                    print(f"  📸 Photos: {camera_stats['total_photos']}")
-                    print(f"  💾 Size: {camera_stats['total_size_mb']} MB")
-                    print(f"  📁 Date folders: {camera_stats['date_folders']}")
+                    print(f"\n\U0001F4F9 {camera_stats['camera']}")
+                    print(f"  \U0001F4F8 Photos: {camera_stats['total_photos']}")
+                    print(f"  \U0001F4BE Size: {camera_stats['total_size_mb']} MB")
+                    print(f"  \U0001F4C1 Date folders: {camera_stats['date_folders']}")
                     if camera_stats['oldest_date']:
-                        print(f"  📅 Oldest: {camera_stats['oldest_date']}")
+                        print(f"  \U0001F4C5 Oldest: {camera_stats['oldest_date']}")
                     if camera_stats['newest_date']:
-                        print(f"  📅 Newest: {camera_stats['newest_date']}")
+                        print(f"  \U0001F4C5 Newest: {camera_stats['newest_date']}")
 
             print("\n" + "=" * 60)
 
         else:
-            print("❌ Invalid command")
+            print("\u274C Invalid command")
             print("\nUsage:")
             print("  python camera_organizer.py --migrate   # Move flat photos to date folders")
             print("  python camera_organizer.py --cleanup   # Remove old photos")
@@ -391,7 +391,7 @@ if __name__ == "__main__":
 
     else:
         print("=" * 60)
-        print("📁 Camera Photo Organizer")
+        print("\U0001F4C1 Camera Photo Organizer")
         print("=" * 60)
         print(f"\nOrganizes photos into date folders:")
         print(f"  cameras/{{camera-name}}/YYYY-MM-DD/photo.jpg")

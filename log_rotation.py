@@ -102,27 +102,27 @@ class LogRotator:
                 # Delete oldest backup
                 if old_backup.exists():
                     old_backup.unlink()
-                    print(f"\U0001F5D1\uFE0F  Deleted: {display_path}/{old_backup.name}")
+                    print(f"\U0001F5D1\uFE0F Deleted: {display_path}/{old_backup.name}")
             else:
                 # Shift backup to next number
                 if old_backup.exists():
                     new_backup = parent_folder / f"{base_name}.{i + 1}{extension}"
                     shutil.move(str(old_backup), str(new_backup))
-                    print(f"📦 Rotated: {display_path}/{old_backup.name} -> {new_backup.name}")
+                    print(f"\U0001F4E6 Rotated: {display_path}/{old_backup.name} -> {new_backup.name}")
 
         # Move current log to .1
         first_backup = parent_folder / f"{base_name}.1{extension}"
         shutil.copy2(str(log_file), str(first_backup))
-        print(f"💾 Backed up: {display_path}/{log_file.name} -> {first_backup.name}")
+        print(f"\U0001F4BE Backed up: {display_path}/{log_file.name} -> {first_backup.name}")
 
         # Clear current log file
         log_file.write_text("")
-        print(f"🔄 Cleared: {display_path}/{log_file.name}")
+        print(f"\U0001F4C4 Cleared: {display_path}/{log_file.name}")
 
     def rotate_all_logs(self):
         """Rotate all .log files in all subdirectories"""
         print("\n" + "=" * 60)
-        print(f"🔄 LOG ROTATION STARTED - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"\U0001F504 LOG ROTATION STARTED - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("=" * 60)
 
         # Find all .log files recursively
@@ -137,27 +137,27 @@ class LogRotator:
                         log_files.append(log_file)
 
         if not log_files:
-            print("ℹ️  No log files found to rotate")
+            print("\u2139\uFE0F No log files found to rotate")
             print("=" * 60 + "\n")
             return
 
-        print(f"📝 Found {len(log_files)} log file(s) to rotate:")
+        print(f"\U0001F50D Found {len(log_files)} log file(s) to rotate:")
 
         # Group by type for display
         system_logs = [f for f in log_files if self.system_folder in f.parents]
         camera_logs = [f for f in log_files if self.cameras_folder in f.parents]
 
         if system_logs:
-            print(f"\n  📁 System Logs ({len(system_logs)}):")
+            print(f"\n  \U0001F4C1 System Logs ({len(system_logs)}):")
             for log_file in sorted(system_logs):
                 rel_path = log_file.relative_to(self.log_folder)
-                print(f"     • {rel_path}")
+                print(f"     \u2022 {rel_path}")
 
         if camera_logs:
-            print(f"\n  📁 Camera Logs ({len(camera_logs)}):")
+            print(f"\n  \U0001F4F9 Camera Logs ({len(camera_logs)}):")
             for log_file in sorted(camera_logs):
                 rel_path = log_file.relative_to(self.log_folder)
-                print(f"     • {rel_path}")
+                print(f"     \u2022 {rel_path}")
 
         print()
 
@@ -167,12 +167,12 @@ class LogRotator:
                 self.rotate_log(log_file)
             except Exception as e:
                 rel_path = log_file.relative_to(self.log_folder)
-                print(f"❌ Error rotating {rel_path}: {e}")
+                print(f"\u274C Error rotating {rel_path}: {e}")
 
         self.last_rotation_date = datetime.now().date()
 
         print("=" * 60)
-        print(f"✅ LOG ROTATION COMPLETED")
+        print(f"\u2705 LOG ROTATION COMPLETED")
         print("=" * 60 + "\n")
 
     def check_and_rotate_if_needed(self):
@@ -195,7 +195,7 @@ class LogRotator:
 
         thread = threading.Thread(target=rotation_worker, daemon=True)
         thread.start()
-        print("🕐 Log rotation monitor started (checks at midnight)")
+        print("\U0001F557 Log rotation monitor started (checks at midnight)")
         return thread
 
     def get_log_stats(self, folder_path: Path, log_name: str) -> dict:
@@ -259,17 +259,17 @@ if __name__ == "__main__":
 
     if len(sys.argv) > 1 and sys.argv[1] == "--rotate":
         # Manual rotation
-        print("🔄 Performing manual log rotation...")
+        print("\U0001F504 Performing manual log rotation...")
         rotator.rotate_all_logs()
 
     elif len(sys.argv) > 1 and sys.argv[1] == "--stats":
         # Show statistics
         print("\n" + "=" * 60)
-        print("📊 LOG STATISTICS")
+        print("\U0001F4CA LOG STATISTICS")
         print("=" * 60)
 
         # System logs
-        print("\n📁 SYSTEM LOGS")
+        print("\n\U0001F4C1 SYSTEM LOGS")
         print("-" * 60)
         for log_name in ["main", "token"]:
             folder = rotator.get_system_log_folder(log_name)
@@ -277,20 +277,20 @@ if __name__ == "__main__":
             if log_file.exists():
                 stats = rotator.get_log_stats(folder, log_name)
                 rel_path = folder.relative_to(LOG_FOLDER)
-                print(f"\n📝 {rel_path}/{log_name}.log")
+                print(f"\n\U0001F4C1 {rel_path}/{log_name}.log")
                 print(f"   Current: {stats['current_lines']} lines, {format_bytes(stats['current_size'])}")
 
                 if stats['backups']:
                     print(f"   Backups:")
                     for backup in stats['backups']:
-                        print(f"      • {log_name}.{backup['number']}.log: "
+                        print(f"      \u2022 {log_name}.{backup['number']}.log: "
                               f"{format_bytes(backup['size'])} "
                               f"(modified: {backup['modified'].strftime('%Y-%m-%d %H:%M')})")
                 else:
                     print(f"   Backups: None")
 
         # Camera logs
-        print("\n📁 CAMERA LOGS")
+        print("\n\U0001F4F9 CAMERA LOGS")
         print("-" * 60)
         if rotator.cameras_folder.exists():
             camera_folders = [d for d in rotator.cameras_folder.iterdir() if d.is_dir()]
@@ -302,13 +302,13 @@ if __name__ == "__main__":
                 if log_file.exists():
                     stats = rotator.get_log_stats(camera_folder, camera_name)
                     rel_path = camera_folder.relative_to(LOG_FOLDER)
-                    print(f"\n📝 {rel_path}/{camera_name}.log")
+                    print(f"\n\U0001F4C1 {rel_path}/{camera_name}.log")
                     print(f"   Current: {stats['current_lines']} lines, {format_bytes(stats['current_size'])}")
 
                     if stats['backups']:
                         print(f"   Backups:")
                         for backup in stats['backups']:
-                            print(f"      • {camera_name}.{backup['number']}.log: "
+                            print(f"      \u2022 {camera_name}.{backup['number']}.log: "
                                   f"{format_bytes(backup['size'])} "
                                   f"(modified: {backup['modified'].strftime('%Y-%m-%d %H:%M')})")
                     else:
@@ -318,7 +318,7 @@ if __name__ == "__main__":
 
     elif len(sys.argv) > 1 and sys.argv[1] == "--test":
         # Create test logs
-        print("🧪 Creating test log files...")
+        print("\U0001F9EA Creating test log files...")
 
         # System logs
         print("\n  Creating system logs:")
@@ -329,7 +329,7 @@ if __name__ == "__main__":
                 for i in range(10):
                     f.write(f"2024-{i + 1:02d}-15 12:00:00 | Test {log_name} entry {i + 1}\n")
             rel_path = folder.relative_to(LOG_FOLDER)
-            print(f"   ✅ Created {rel_path}/{log_name}.log")
+            print(f"   \u2705 Created {rel_path}/{log_name}.log")
 
         # Camera logs
         print("\n  Creating camera logs:")
@@ -341,45 +341,45 @@ if __name__ == "__main__":
                 for i in range(10):
                     f.write(f"2024-{i + 1:02d}-15 12:00:00 | Test {camera_name} entry {i + 1}\n")
             rel_path = folder.relative_to(LOG_FOLDER)
-            print(f"   ✅ Created {rel_path}/{camera_name}.log")
+            print(f"   \u2705 Created {rel_path}/{camera_name}.log")
 
-        print("\n🔄 Now rotating logs...")
+        print("\n\U0001F504 Now rotating logs...")
         rotator.rotate_all_logs()
 
-        print("\n📊 Final state:")
+        print("\n\U0001F4CA Final state:")
         print("\n  System logs:")
         for log_name in ["main", "token"]:
             folder = rotator.get_system_log_folder(log_name)
             stats = rotator.get_log_stats(folder, log_name)
-            print(f"    • {log_name}: {stats['current_lines']} lines, {len(stats['backups'])} backups")
+            print(f"    \u2022 {log_name}: {stats['current_lines']} lines, {len(stats['backups'])} backups")
 
         print("\n  Camera logs:")
         for camera_name in camera_names:
             folder = rotator.get_camera_log_folder(camera_name)
             stats = rotator.get_log_stats(folder, camera_name)
-            print(f"    • {camera_name}: {stats['current_lines']} lines, {len(stats['backups'])} backups")
+            print(f"    \u2022 {camera_name}: {stats['current_lines']} lines, {len(stats['backups'])} backups")
 
     else:
         print("=" * 60)
-        print("📚 Log Rotation Module")
+        print("\U0001F4DA Log Rotation Module")
         print("=" * 60)
         print("\nLog Organization:")
         print("  logs/")
-        print("  ├── system/")
-        print("  │   ├── main/")
-        print("  │   │   ├── main.log")
-        print("  │   │   └── main.1.log - main.5.log")
-        print("  │   └── token/")
-        print("  │       ├── token.log")
-        print("  │       └── token.1.log - token.5.log")
-        print("  └── cameras/")
-        print("      ├── front-door/")
-        print("      │   ├── front-door.log")
-        print("      │   └── front-door.1.log - front-door.5.log")
-        print("      ├── back-door/")
-        print("      │   ├── back-door.log")
-        print("      │   └── back-door.1.log - back-door.5.log")
-        print("      └── ...")
+        print("  \u251C\u2500\u2500 system/")
+        print("  \u2502   \u251C\u2500\u2500 main/")
+        print("  \u2502   \u2502   \u251C\u2500\u2500 main.log")
+        print("  \u2502   \u2502   \u2514\u2500\u2500 main.1.log - main.5.log")
+        print("  \u2502   \u2514\u2500\u2500 token/")
+        print("  \u2502       \u251C\u2500\u2500 token.log")
+        print("  \u2502       \u2514\u2500\u2500 token.1.log - token.5.log")
+        print("  \u2514\u2500\u2500 cameras/")
+        print("      \u251C\u2500\u2500 front-door/")
+        print("      \u2502   \u251C\u2500\u2500 front-door.log")
+        print("      \u2502   \u2514\u2500\u2500 front-door.1.log - front-door.5.log")
+        print("      \u251C\u2500\u2500 back-door/")
+        print("      \u2502   \u251C\u2500\u2500 back-door.log")
+        print("      \u2502   \u2514\u2500\u2500 back-door.1.log - back-door.5.log")
+        print("      \u2514\u2500\u2500 ...")
         print("\nUsage:")
         print("  python log_rotation.py --rotate    # Manually rotate all logs")
         print("  python log_rotation.py --stats     # Show log statistics")

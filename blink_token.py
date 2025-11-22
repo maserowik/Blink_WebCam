@@ -19,7 +19,7 @@ async def start():
         # If 2FA is required, prompt for it
         await blink.prompt_2fa()
 
-    print("\n🔍 Discovering cameras...")
+    print("\n\U0001F4F9 Discovering cameras...")
 
     # Refresh to get camera data
     await blink.refresh()
@@ -29,7 +29,7 @@ async def start():
     camera_info = {}
 
     for sync_name, sync_module in blink.sync.items():
-        print(f"\n✓ Found sync module: {sync_name}")
+        print(f"\n\u2714 Found sync module: {sync_name}")
         for camera_name, camera in sync_module.cameras.items():
             cameras.append(camera_name)
             camera_info[camera_name] = {
@@ -40,7 +40,7 @@ async def start():
                 "battery": getattr(camera, 'battery', None),
                 "temperature": getattr(camera, 'temperature', None)
             }
-            print(f"  📹 {camera_name}")
+            print(f"  \U0001F4F9 {camera_name}")
             print(f"     - Motion detection: {getattr(camera, 'motion_enabled', 'Unknown')}")
             if hasattr(camera, 'battery'):
                 print(f"     - Battery: {camera.battery}")
@@ -69,14 +69,14 @@ async def start():
     with open(token_file, "w") as f:
         json.dump(data, f, indent=4)
 
-    print(f"\n✓ Credentials saved to {token_file}")
-    print(f"✓ Setup complete!")
+    print(f"\n\u2714 Credentials saved to {token_file}")
+    print(f"\u2714 Setup complete!")
 
     # Display summary
     if cameras:
-        print(f"\n✓ Successfully configured {len(cameras)} camera(s)")
+        print(f"\n\u2714 Successfully configured {len(cameras)} camera(s)")
     else:
-        print("\n⚠ No cameras found on your account")
+        print("\n\u26A0 No cameras found on your account")
         print("   Make sure your cameras are set up in the Blink app first")
 
     # Close the session
@@ -88,9 +88,9 @@ if __name__ == "__main__":
     session = None
     try:
         session = asyncio.run(start())
-        print("\n✓ Authentication successful!")
+        print("\n\u2714 Authentication successful!")
     except Exception as e:
-        print(f"\n✗ Error: {type(e).__name__}: {e}")
+        print(f"\n\u2717 Error: {type(e).__name__}: {e}")
         import traceback
 
         traceback.print_exc()
