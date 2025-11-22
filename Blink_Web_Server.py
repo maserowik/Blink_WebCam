@@ -134,6 +134,42 @@ def get_latest_images_from_date_folders(camera_folder: Path, carousel_images: in
     return all_images
 
 
+def get_most_recent_photo_time(camera_folder: Path) -> datetime | None:
+    """
+    Get the timestamp of the most recent photo for a camera
+
+    Args:
+        camera_folder: Path to camera folder
+
+    Returns:
+        datetime of most recent photo or None if no photos exist
+    """
+    import re
+    date_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+    date_folders = [d for d in camera_folder.iterdir()
+                    if d.is_dir() and date_pattern.match(d.name)]
+
+    if not date_folders:
+        return None
+
+    # Sort by date (newest first)
+    date_folders.sort(key=lambda d: d.name, reverse=True)
+
+    # Check most recent date folder
+    for date_folder in date_folders:
+        images = sorted(
+            date_folder.glob("*.jpg"),
+            key=lambda x: x.stat().st_mtime,
+            reverse=True
+        )
+
+        if images:
+            # Return modification time of most recent image
+            return datetime.fromtimestamp(images[0].stat().st_mtime)
+
+    return None
+
+
 def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
     """
     Get latest log entry from most recent log file
@@ -146,10 +182,10 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
         Dictionary with parsed log data
     """
     import re
-    
+
     # Pattern: {camera_name}_YYYY-MM-DD.log
     pattern = re.compile(rf'^{re.escape(camera_name)}_(\d{{4}}-\d{{2}}-\d{{2}})\.log$')
-    
+
     log_files = []
     for file in log_folder.iterdir():
         if file.is_file():
@@ -157,7 +193,7 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
             if match:
                 date_str = match.group(1)
                 log_files.append((date_str, file))
-    
+
     if not log_files:
         return {
             'temp': 'N/A',
@@ -165,11 +201,11 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
             'wifi': 0,
             'timestamp': 'N/A'
         }
-    
+
     # Sort by date (newest first)
     log_files.sort(key=lambda x: x[0], reverse=True)
     latest_log = log_files[0][1]
-    
+
     # Read last line
     try:
         with open(latest_log, "r", encoding="utf-8", errors="ignore") as f:
@@ -181,21 +217,21 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
                     'wifi': 0,
                     'timestamp': 'N/A'
                 }
-            
+
             last_line = lines[-1]
             parts = last_line.split(" | ")
-            
+
             temp = "N/A"
             battery = "N/A"
             wifi = 0
             timestamp = "N/A"
-            
+
             if len(parts) >= 4:
                 timestamp = parts[0]
                 for part in parts:
                     if "Temp:" in part:
                         temp_str = part.split("Temp:")[1].strip().split()[0]
-                        temp = temp_str.replace("\u00B0F", "").replace("\u00B0F", "")
+                        temp = temp_str.replace("°F", "").replace("°F", "")
                         temp_clean = ""
                         for char in temp:
                             if char.isdigit() or char == '.' or char == '-':
@@ -212,7 +248,7 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
                             wifi = int(wifi_parts[0])
                         except:
                             wifi = 0
-            
+
             return {
                 'temp': temp,
                 'battery': battery,
@@ -256,6 +292,15 @@ def get_camera_data():
             # Get snooze status for this camera
             snooze_status = snooze_manager.get_snooze_status(normalized_name)
 
+            # Get most recent photo timestamp
+            last_photo_time = get_most_recent_photo_time(cam_folder)
+            last_update = None
+            last_update_formatted = None
+
+            if last_photo_time:
+                last_update = last_photo_time.isoformat()
+                last_update_formatted = last_photo_time.strftime("%m/%d/%Y %I:%M:%S %p")
+
             camera_data.append({
                 "name": cam_name,
                 "normalized_name": normalized_name,
@@ -264,12 +309,16 @@ def get_camera_data():
                 "battery": log_data['battery'],
                 "wifi": log_data['wifi'],
                 "timestamp": log_data['timestamp'],
-                "snooze_status": snooze_status
+                "snooze_status": snooze_status,
+                "last_update": last_update,
+                "last_update_formatted": last_update_formatted
             })
 
         return camera_data
     except Exception as e:
         print(f"Error reading camera data: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 
@@ -357,11 +406,11 @@ def index():
     """Main page with camera grid"""
     cameras = get_camera_data()
     location = get_location()
-    
+
     # Get list of normalized camera names for global snooze check
     camera_names = [cam['normalized_name'] for cam in cameras]
     all_snoozed = snooze_manager.are_all_cameras_snoozed(camera_names)
-    
+
     return render_template('index.html', cameras=cameras, location=location, all_snoozed=all_snoozed)
 
 
@@ -370,6 +419,50 @@ def api_cameras():
     """API endpoint for camera data"""
     cameras = get_camera_data()
     return jsonify(cameras)
+
+
+@app.route('/api/camera/<camera_name>/last_update')
+def api_camera_last_update(camera_name):
+    """Get last update time for a specific camera"""
+    normalized_name = normalize_camera_name(camera_name)
+    cam_folder = CAMERAS_DIR / normalized_name
+
+    last_photo_time = get_most_recent_photo_time(cam_folder)
+
+    if last_photo_time:
+        return jsonify({
+            "success": True,
+            "camera": camera_name,
+            "last_update": last_photo_time.isoformat(),
+            "last_update_formatted": last_photo_time.strftime("%m/%d/%Y %I:%M:%S %p"),
+            "last_update_relative": get_relative_time(last_photo_time)
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "camera": camera_name,
+            "error": "No photos found"
+        }), 404
+
+
+def get_relative_time(dt: datetime) -> str:
+    """Convert datetime to relative time string (e.g., '5 minutes ago')"""
+    now = datetime.now()
+    diff = now - dt
+
+    seconds = diff.total_seconds()
+
+    if seconds < 60:
+        return "Just now"
+    elif seconds < 3600:
+        minutes = int(seconds / 60)
+        return f"{minutes} minute{'s' if minutes != 1 else ''} ago"
+    elif seconds < 86400:
+        hours = int(seconds / 3600)
+        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+    else:
+        days = int(seconds / 86400)
+        return f"{days} day{'s' if days != 1 else ''} ago"
 
 
 @app.route('/api/location')
@@ -446,12 +539,12 @@ def api_snooze_all_status():
     try:
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
-        
+
         cameras = config.get("cameras", [])
         camera_names = [normalize_camera_name(cam) for cam in cameras]
-        
+
         all_snoozed = snooze_manager.are_all_cameras_snoozed(camera_names)
-        
+
         return jsonify({
             "all_snoozed": all_snoozed,
             "success": True
@@ -494,12 +587,12 @@ def api_snooze_all_set():
     try:
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
-        
+
         cameras = config.get("cameras", [])
         camera_names = [normalize_camera_name(cam) for cam in cameras]
-        
+
         snooze_manager.snooze_all_cameras(camera_names, duration_minutes)
-        
+
         return jsonify({"success": True, "count": len(camera_names)})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -575,7 +668,7 @@ def get_image(camera_name, image_path):
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("Blink Camera Web Server")
+    print("\U0001F535 Blink Camera Web Server")
     print("=" * 60)
 
     local_ip = get_local_ip()
@@ -585,19 +678,19 @@ if __name__ == '__main__':
 
         logging.getLogger("waitress.queue").setLevel(logging.ERROR)
 
-        print("Using Waitress production server")
-        print(f"Local access:   http://localhost:5000")
-        print(f"Network access: http://{local_ip}:5000")
+        print("\u2705 Using Waitress production server")
+        print(f"\U0001F3E0 Local access:   http://localhost:5000")
+        print(f"\U0001F4F1 Network access: http://{local_ip}:5000")
         print("=" * 60)
-        print("Press Ctrl+C to stop the server")
+        print("\u26A1 Press Ctrl+C to stop the server")
         print("=" * 60)
         serve(app, host='0.0.0.0', port=5000, threads=6, channel_timeout=120, backlog=128)
     except ImportError:
-        print("Waitress not found - using Flask development server")
-        print("For production use, install Waitress:")
+        print("\u26A0\uFE0F Waitress not found - using Flask development server")
+        print("\U0001F4E6 For production use, install Waitress:")
         print("   pip install waitress")
         print("=" * 60)
-        print(f"Local access:   http://localhost:5000")
-        print(f"Network access: http://{local_ip}:5000")
+        print(f"\U0001F3E0 Local access:   http://localhost:5000")
+        print(f"\U0001F4F1 Network access: http://{local_ip}:5000")
         print("=" * 60)
         app.run(host='0.0.0.0', port=5000, debug=False)

@@ -12,6 +12,7 @@ import warnings
 from PIL import Image
 import threading
 import time
+import io
 
 # Import the new log rotation module
 from log_rotation import LogRotator
@@ -22,10 +23,8 @@ from camera_organizer import CameraOrganizer
 # Suppress the specific blinkpy warning about last_refresh
 warnings.filterwarnings("ignore", message=".*last_refresh.*")
 
+
 # Redirect stderr to suppress blinkpy interval calculation errors
-import io
-
-
 class SuppressSpecificErrors:
     def __init__(self, stderr):
         self.stderr = stderr
@@ -203,7 +202,7 @@ def schedule_midnight_cleanup():
 
     thread = threading.Thread(target=cleanup_worker, daemon=True)
     thread.start()
-    log_main("📅 Midnight cleanup scheduler started")
+    log_main("\U0001F4C5 Midnight cleanup scheduler started")
     return thread
 
 
@@ -259,31 +258,70 @@ async def take_snapshot(blink):
         image_bytes = None
         source = "None"
 
-        # ---------------- Method 2: Use get_media() only ---------------- #
+        # ============ FIX: Request new snapshot FIRST ============
         try:
-            log_main("  Calling get_media()...")
+            log_main("  \U0001F4F8 Requesting new snapshot from camera...")
+            snap_result = await cam.snap_picture()
+
+            # Extract only useful info from the verbose response
+            if isinstance(snap_result, dict):
+                command_id = snap_result.get('id', 'unknown')
+                state = snap_result.get('state_condition', 'unknown')
+                log_main(f"  \u2705 Snapshot requested (ID: {command_id}, State: {state})")
+            else:
+                log_main(f"  \u2705 Snapshot requested")
+
+            # Wait a moment for the snapshot to be processed
+            await asyncio.sleep(3)
+
+            # Refresh camera to get the new image
+            await blink.refresh(force=True)
+
+        except Exception as e:
+            log_main(f"  \u26A0\uFE0F Snapshot request failed: {type(e).__name__}: {e}")
+
+        # ============ Now get the media ============
+        try:
             response = await cam.get_media()
             if response.status == 200:
                 image_bytes = await response.read()
                 source = "get_media"
-                log_main(f"  [OK] get_media returned {len(image_bytes)} bytes")
+                log_main(f"  \u2705 Downloaded {len(image_bytes)} bytes")
             else:
-                log_main(f"  [FAIL] get_media returned non-200: {response.status}")
+                log_main(f"  \u274C HTTP {response.status}")
         except Exception as e:
-            log_main(f"  [FAIL] get_media error: {type(e).__name__}: {e}")
+            log_main(f"  \u274C Download failed: {e}")
 
-        # ---------------- Save image using camera_organizer ---------------- #
-        if not image_bytes:
+        # ============ Fallback: Try thumbnail ============
+        if not image_bytes or len(image_bytes) < 1000:
+            try:
+                thumb_response = await cam.get_thumbnail()
+                if thumb_response.status == 200:
+                    image_bytes = await thumb_response.read()
+                    source = "thumbnail"
+                    log_main(f"  \u26A0\uFE0F Using thumbnail ({len(image_bytes)} bytes)")
+            except Exception as e:
+                log_main(f"  \u274C Thumbnail failed: {e}")
+
+        # ============ Save image using camera_organizer ============
+        if not image_bytes or len(image_bytes) < 1000:
             # Placeholder if method fails
             placeholder = Image.new("RGB", (640, 480), color=(255, 0, 0))
-            from io import BytesIO
-            buffer = BytesIO()
+            buffer = io.BytesIO()
             placeholder.save(buffer, format='JPEG')
             image_bytes = buffer.getvalue()
             source = "placeholder"
-            log_main(f"  [FAIL] No image data, using placeholder")
+            log_main(f"  \u26A0\uFE0F No valid image data, using placeholder")
 
         try:
+            # Verify image data is valid before saving
+            try:
+                img = Image.open(io.BytesIO(image_bytes))
+                img.verify()
+                log_main(f"  \u2705 Valid {img.format} image {img.size}")
+            except Exception as e:
+                log_main(f"  \u26A0\uFE0F Image validation failed: {e}")
+
             # Use camera_organizer to save photo to date folder
             photo_path = camera_organizer.save_photo_to_date_folder(
                 cam_folder,
@@ -291,10 +329,19 @@ async def take_snapshot(blink):
                 cam_name,
                 datetime.now()
             )
-            log_main(
-                f"  [SUCCESS] Saved to {photo_path.parent.name}/{photo_path.name} ({source}, {len(image_bytes)} bytes)")
+
+            # Verify file was actually written
+            if photo_path.exists():
+                actual_size = photo_path.stat().st_size
+                log_main(
+                    f"  \u2705 Saved: {photo_path.parent.name}/{photo_path.name} ({actual_size:,} bytes, {source})")
+            else:
+                log_main(f"  \u274C File not found after save!")
+
         except Exception as e:
-            log_main(f"  [FAIL] Error saving image: {e}")
+            log_main(f"  \u274C Save error: {e}")
+            import traceback
+            log_main(traceback.format_exc())
 
         # Log camera info to camera-specific log
         log_entry = (
@@ -404,7 +451,7 @@ async def poll_blink():
                     except Exception as e:
                         log_token(f"  ERROR re-initializing cameras: {e}")
 
-                # STEP 3: Take snapshot (THIS WAS MISSING!)
+                # STEP 3: Take snapshot
                 log_main("Starting snapshot cycle...")
                 await take_snapshot(blink)
 

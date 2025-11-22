@@ -147,7 +147,7 @@ class AlertSnooze:
         """
         if not camera_names:
             return False
-        
+
         return all(self.is_camera_snoozed(cam) for cam in camera_names)
 
     def get_snooze_expiry(self, camera_name: str) -> Optional[datetime]:
