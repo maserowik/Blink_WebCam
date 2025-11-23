@@ -1,12 +1,11 @@
 """
 log_rotation.py - Log Rotation Module for Blink Camera System
 
-REPLACE YOUR EXISTING log_rotation.py WITH THIS VERSION
-
 This handles daily log rotation with up to 5 days of history.
 Logs are organized into folders:
   - logs/system/main/
   - logs/system/token/
+  - logs/system/performance/
   - logs/cameras/{camera-name}/
 
 File location: /your-project/log_rotation.py
@@ -43,10 +42,10 @@ class LogRotator:
 
     def get_system_log_folder(self, log_name: str) -> Path:
         """
-        Get the folder for a system log (main or token)
+        Get the folder for a system log (main, token, or performance)
 
         Args:
-            log_name: 'main' or 'token'
+            log_name: 'main', 'token', or 'performance'
 
         Returns:
             Path to logs/system/{log_name}/
@@ -271,7 +270,7 @@ if __name__ == "__main__":
         # System logs
         print("\n\U0001F4C1 SYSTEM LOGS")
         print("-" * 60)
-        for log_name in ["main", "token"]:
+        for log_name in ["main", "token", "performance"]:
             folder = rotator.get_system_log_folder(log_name)
             log_file = folder / f"{log_name}.log"
             if log_file.exists():
@@ -320,9 +319,9 @@ if __name__ == "__main__":
         # Create test logs
         print("\U0001F9EA Creating test log files...")
 
-        # System logs
+        # System logs (including performance)
         print("\n  Creating system logs:")
-        for log_name in ["main", "token"]:
+        for log_name in ["main", "token", "performance"]:
             folder = rotator.get_system_log_folder(log_name)
             log_file = folder / f"{log_name}.log"
             with open(log_file, "w") as f:
@@ -348,7 +347,7 @@ if __name__ == "__main__":
 
         print("\n\U0001F4CA Final state:")
         print("\n  System logs:")
-        for log_name in ["main", "token"]:
+        for log_name in ["main", "token", "performance"]:
             folder = rotator.get_system_log_folder(log_name)
             stats = rotator.get_log_stats(folder, log_name)
             print(f"    \u2022 {log_name}: {stats['current_lines']} lines, {len(stats['backups'])} backups")
@@ -369,9 +368,12 @@ if __name__ == "__main__":
         print("  \u2502   \u251C\u2500\u2500 main/")
         print("  \u2502   \u2502   \u251C\u2500\u2500 main.log")
         print("  \u2502   \u2502   \u2514\u2500\u2500 main.1.log - main.5.log")
-        print("  \u2502   \u2514\u2500\u2500 token/")
-        print("  \u2502       \u251C\u2500\u2500 token.log")
-        print("  \u2502       \u2514\u2500\u2500 token.1.log - token.5.log")
+        print("  \u2502   \u251C\u2500\u2500 token/")
+        print("  \u2502   \u2502   \u251C\u2500\u2500 token.log")
+        print("  \u2502   \u2502   \u2514\u2500\u2500 token.1.log - token.5.log")
+        print("  \u2502   \u2514\u2500\u2500 performance/")
+        print("  \u2502       \u251C\u2500\u2500 performance.log")
+        print("  \u2502       \u2514\u2500\u2500 performance.1.log - performance.5.log")
         print("  \u2514\u2500\u2500 cameras/")
         print("      \u251C\u2500\u2500 front-door/")
         print("      \u2502   \u251C\u2500\u2500 front-door.log")

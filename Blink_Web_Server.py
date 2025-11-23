@@ -231,7 +231,7 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
                 for part in parts:
                     if "Temp:" in part:
                         temp_str = part.split("Temp:")[1].strip().split()[0]
-                        temp = temp_str.replace("°F", "").replace("°F", "")
+                        temp = temp_str.replace("\u00B0F", "").replace("\u00B0F", "")
                         temp_clean = ""
                         for char in temp:
                             if char.isdigit() or char == '.' or char == '-':
@@ -472,6 +472,9 @@ def api_location():
     return jsonify(location)
 
 
+# REPLACE ONLY the @app.route('/api/weather') function in Blink_Web_Server.py
+# Find it around line 250 and replace the entire function
+
 @app.route('/api/weather')
 def api_weather():
     """Weather API endpoint - proxies wttr.in to avoid CORS issues"""
@@ -480,23 +483,40 @@ def api_weather():
         city = location.get("city", "Bethel Park")
         state = location.get("state", "PA")
 
-        # Fetch weather from wttr.in server-side (no CORS issues)
+        # Use the EXACT format that works in curl
+        location_query = f"{city},{state}"
+        url = f'https://wttr.in/{location_query}?format=j1'
+
+        print(f"Fetching weather from: {url}")
+
+        # Simple request with minimal headers (like curl)
         response = requests.get(
-            f'https://wttr.in/{city},{state}?format=j1',
-            timeout=10,
-            headers={'User-Agent': 'Blink-Camera-Monitor/1.0'}
+            url,
+            timeout=10
         )
-        response.raise_for_status()
 
-        return jsonify(response.json())
+        print(f"Weather response status: {response.status_code}")
 
-    except requests.exceptions.Timeout:
-        return jsonify({'error': 'Weather service timeout'}), 504
-    except requests.exceptions.RequestException as e:
-        return jsonify({'error': f'Weather service error: {str(e)}'}), 500
+        if response.status_code == 200:
+            data = response.json()
+            print("Weather data received successfully")
+            return jsonify(data)
+        else:
+            print(f"Weather API returned status {response.status_code}")
+            print(f"Response: {response.text[:200]}")
+            raise Exception(f"HTTP {response.status_code}")
+
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
+        print(f'Weather error: {str(e)}')
+        # Return valid fallback data
+        return jsonify({
+            'current_condition': [{
+                'temp_F': '--',
+                'FeelsLikeF': '--',
+                'humidity': '--',
+                'weatherDesc': [{'value': 'Service Unavailable'}]
+            }]
+        }), 200
 
 @app.route('/api/arm/status')
 def api_arm_status():

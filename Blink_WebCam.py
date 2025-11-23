@@ -13,6 +13,7 @@ from PIL import Image
 import threading
 import time
 import io
+from functools import wraps
 
 # Import the new log rotation module
 from log_rotation import LogRotator
@@ -93,6 +94,7 @@ camera_organizer = CameraOrganizer(CAMERAS_DIR, max_days=MAX_DAYS)
 # Define log file paths in organized folders
 MAIN_LOG_FOLDER = log_rotator.get_system_log_folder("main")
 TOKEN_LOG_FOLDER = log_rotator.get_system_log_folder("token")
+PERF_LOG_FOLDER = log_rotator.get_system_log_folder("performance")
 
 
 # ---------------- Utility Functions ---------------- #
@@ -147,6 +149,39 @@ def log_token(msg: str):
         f.write(line)
     # Also log to main log
     log_main(msg)
+
+
+def log_performance(msg: str):
+    """Log performance metrics to system/performance/performance_YYYY-MM-DD.log file"""
+    log_rotator.check_and_rotate_if_needed()
+
+    log_file = get_current_log_file(PERF_LOG_FOLDER, "performance")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"{timestamp} | {msg}\n"
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(line)
+
+
+def log_camera_performance(cam_name: str, operation: str, duration: float, success: bool = True):
+    """Log how long camera operations take"""
+    normalized_name = normalize_camera_name(cam_name)
+    camera_log_folder = log_rotator.get_camera_log_folder(normalized_name)
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    log_file = camera_log_folder / f"{normalized_name}_{date_str}.log"
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    status = "SUCCESS" if success else "FAILED"
+    line = f"{timestamp} | PERF | {operation} | {duration:.2f}s | {status}\n"
+
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(line)
+
+    # Also log to main performance log
+    log_performance(f"{cam_name} | {operation} | {duration:.2f}s | {status}")
+
+    # Warn if operation is slow
+    if duration > 30:
+        log_main(f"\u26A0\uFE0F SLOW OPERATION: {cam_name} - {operation} took {duration:.2f}s")
 
 
 def get_camera_log_file(cam_name: str) -> Path:
@@ -229,133 +264,255 @@ async def wait_until_next_interval(interval_seconds):
     print("\rStarting next snapshot...               ")
 
 
-# ---------------- Snapshot Function ---------------- #
+def with_timeout(seconds):
+    """Decorator to add timeout to async functions"""
+
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            try:
+                return await asyncio.wait_for(func(*args, **kwargs), timeout=seconds)
+            except asyncio.TimeoutError:
+                log_main(f"\u23F1\uFE0F Timeout in {func.__name__} after {seconds}s")
+                return None
+
+        return wrapper
+
+    return decorator
+
+
+# ---------------- Camera Processing Functions ---------------- #
+async def process_single_camera(blink, cam_name, cam):
+    """Process a single camera with timeout protection and detailed logging"""
+    start_time = time.time()
+
+    log_main(f"{'=' * 60}")
+    log_main(f"Processing camera: {cam_name}")
+    log_main(f"{'=' * 60}")
+
+    cam_folder = ensure_camera_folder(cam_name)
+    bars = wifi_bars(cam.wifi_strength)
+
+    log_main(f"  Battery: {getattr(cam, 'battery', 'N/A')}")
+    log_main(f"  Temperature: {getattr(cam, 'temperature', 'N/A')}")
+    log_main(f"  WiFi Signal: {getattr(cam, 'wifi_strength', 'N/A')} dBm ({bars}/5 bars)")
+
+    image_bytes = None
+    source = "None"
+
+    # REQUEST NEW SNAPSHOT WITH TIMEOUT
+    snap_start = time.time()
+    try:
+        log_main("  \U0001F4F8 Requesting new snapshot from camera...")
+        snap_result = await asyncio.wait_for(
+            cam.snap_picture(),
+            timeout=15  # 15 second timeout for snap request
+        )
+
+        snap_duration = time.time() - snap_start
+        log_camera_performance(cam_name, "snap_picture", snap_duration, True)
+
+        if isinstance(snap_result, dict):
+            command_id = snap_result.get('id', 'unknown')
+            state = snap_result.get('state_condition', 'unknown')
+            log_main(f"  \u2705 Snapshot requested (ID: {command_id}, State: {state})")
+        else:
+            log_main(f"  \u2705 Snapshot requested")
+
+        # WAIT LONGER FOR CAMERA TO PROCESS (increased from 3 to 8 seconds)
+        log_main("  \u23F3 Waiting 8 seconds for camera to process snapshot...")
+        await asyncio.sleep(8)
+
+        # Refresh camera to get the new image
+        refresh_start = time.time()
+        await asyncio.wait_for(
+            blink.refresh(force=True),
+            timeout=20
+        )
+        refresh_duration = time.time() - refresh_start
+        log_camera_performance(cam_name, "refresh_after_snap", refresh_duration, True)
+
+    except asyncio.TimeoutError:
+        snap_duration = time.time() - snap_start
+        log_camera_performance(cam_name, "snap_picture", snap_duration, False)
+        log_main(f"  \u26A0\uFE0F Snapshot request timed out for {cam_name}")
+        log_camera(cam_name, f"TIMEOUT: Snapshot request exceeded 15 seconds")
+    except Exception as e:
+        snap_duration = time.time() - snap_start
+        log_camera_performance(cam_name, "snap_picture", snap_duration, False)
+        log_main(f"  \u26A0\uFE0F Snapshot request failed: {type(e).__name__}: {e}")
+        log_camera(cam_name, f"ERROR: Snapshot request failed - {type(e).__name__}: {e}")
+
+    # GET MEDIA WITH TIMEOUT
+    media_start = time.time()
+    try:
+        response = await asyncio.wait_for(
+            cam.get_media(),
+            timeout=30  # 30 second timeout for download
+        )
+
+        if response.status == 200:
+            image_bytes = await response.read()
+            source = "get_media"
+            media_duration = time.time() - media_start
+            log_camera_performance(cam_name, "get_media", media_duration, True)
+            log_main(f"  \u2705 Downloaded {len(image_bytes)} bytes in {media_duration:.2f}s")
+        else:
+            media_duration = time.time() - media_start
+            log_camera_performance(cam_name, "get_media", media_duration, False)
+            log_main(f"  \u274C HTTP {response.status}")
+            log_camera(cam_name, f"ERROR: HTTP {response.status} from get_media")
+    except asyncio.TimeoutError:
+        media_duration = time.time() - media_start
+        log_camera_performance(cam_name, "get_media", media_duration, False)
+        log_main(f"  \u23F1\uFE0F Media download timed out for {cam_name}")
+        log_camera(cam_name, f"TIMEOUT: Media download exceeded 30 seconds")
+    except Exception as e:
+        media_duration = time.time() - media_start
+        log_camera_performance(cam_name, "get_media", media_duration, False)
+        log_main(f"  \u274C Download failed: {e}")
+        log_camera(cam_name, f"ERROR: Media download failed - {type(e).__name__}: {e}")
+
+    # FALLBACK: Try thumbnail with timeout
+    if not image_bytes or len(image_bytes) < 1000:
+        thumb_start = time.time()
+        try:
+            thumb_response = await asyncio.wait_for(
+                cam.get_thumbnail(),
+                timeout=15
+            )
+            if thumb_response.status == 200:
+                image_bytes = await thumb_response.read()
+                source = "thumbnail"
+                thumb_duration = time.time() - thumb_start
+                log_camera_performance(cam_name, "get_thumbnail", thumb_duration, True)
+                log_main(f"  \u26A0\uFE0F Using thumbnail ({len(image_bytes)} bytes)")
+                log_camera(cam_name, f"FALLBACK: Using thumbnail instead of full image")
+        except asyncio.TimeoutError:
+            thumb_duration = time.time() - thumb_start
+            log_camera_performance(cam_name, "get_thumbnail", thumb_duration, False)
+            log_main(f"  \u23F1\uFE0F Thumbnail download timed out for {cam_name}")
+            log_camera(cam_name, f"TIMEOUT: Thumbnail download exceeded 15 seconds")
+        except Exception as e:
+            thumb_duration = time.time() - thumb_start
+            log_camera_performance(cam_name, "get_thumbnail", thumb_duration, False)
+            log_main(f"  \u274C Thumbnail failed: {e}")
+            log_camera(cam_name, f"ERROR: Thumbnail download failed - {type(e).__name__}: {e}")
+
+    # REST OF THE SAVE LOGIC
+    if not image_bytes or len(image_bytes) < 1000:
+        placeholder = Image.new("RGB", (640, 480), color=(255, 0, 0))
+        buffer = io.BytesIO()
+        placeholder.save(buffer, format='JPEG')
+        image_bytes = buffer.getvalue()
+        source = "placeholder"
+        log_main(f"  \u26A0\uFE0F No valid image data, using placeholder")
+        log_camera(cam_name, f"WARNING: No valid image received, using red placeholder")
+
+    try:
+        # Verify image
+        try:
+            img = Image.open(io.BytesIO(image_bytes))
+            img.verify()
+            log_main(f"  \u2705 Valid {img.format} image {img.size}")
+        except Exception as e:
+            log_main(f"  \u26A0\uFE0F Image validation failed: {e}")
+            log_camera(cam_name, f"WARNING: Image validation failed - {e}")
+
+        # Save photo
+        save_start = time.time()
+        photo_path = camera_organizer.save_photo_to_date_folder(
+            cam_folder,
+            image_bytes,
+            cam_name,
+            datetime.now()
+        )
+        save_duration = time.time() - save_start
+
+        if photo_path.exists():
+            actual_size = photo_path.stat().st_size
+            log_camera_performance(cam_name, "save_photo", save_duration, True)
+            log_main(f"  \u2705 Saved: {photo_path.parent.name}/{photo_path.name} ({actual_size:,} bytes, {source})")
+        else:
+            log_camera_performance(cam_name, "save_photo", save_duration, False)
+            log_main(f"  \u274C File not found after save!")
+            log_camera(cam_name, f"ERROR: Photo file not found after save operation")
+
+    except Exception as e:
+        log_main(f"  \u274C Save error: {e}")
+        log_camera(cam_name, f"ERROR: Failed to save photo - {type(e).__name__}: {e}")
+        import traceback
+        log_main(traceback.format_exc())
+
+    # Log camera info to camera-specific log
+    log_entry = (
+        f"Temp: {cam.temperature}\u00B0F | Battery: {cam.battery} | "
+        f"WiFi: {bars}/5 | Source: {source}"
+    )
+    log_camera(cam_name, log_entry)
+
+    # Calculate total time for this camera
+    total_duration = time.time() - start_time
+    log_camera_performance(cam_name, "total_processing", total_duration, True)
+
+    print(f"\n--- {cam_name} ---")
+    print(f"Temperature: {cam.temperature}\u00B0F")
+    print(f"Battery: {cam.battery}")
+    print(f"WiFi: {bars}/5")
+    print(f"Source: {source}")
+    print(f"Processing Time: {total_duration:.2f}s")
+    print("----------------------\n")
+
+
+# ---------------- Main Snapshot Function ---------------- #
 async def take_snapshot(blink):
+    """Take snapshots from all configured cameras"""
+    cycle_start = time.time()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     try:
         log_main("Refreshing all cameras...")
-        await blink.refresh(force=True)
-        log_main("Refresh complete.")
+        refresh_start = time.time()
+        await asyncio.wait_for(blink.refresh(force=True), timeout=30)
+        refresh_duration = time.time() - refresh_start
+        log_performance(f"global_refresh | {refresh_duration:.2f}s | SUCCESS")
+        log_main(f"Refresh complete in {refresh_duration:.2f}s")
+    except asyncio.TimeoutError:
+        refresh_duration = time.time() - refresh_start
+        log_performance(f"global_refresh | {refresh_duration:.2f}s | TIMEOUT")
+        log_main("\u26A0\uFE0F Camera refresh timed out after 30s")
     except Exception as e:
         log_main(f"Error refreshing blink: {e}")
+        log_performance(f"global_refresh | ERROR: {e}")
+
+    # PROCESS EACH CAMERA INDEPENDENTLY (don't let one failure affect others)
+    successful = 0
+    failed = 0
 
     for cam_name, cam in blink.cameras.items():
         if cam_name not in CAMERAS:
             log_main(f"Skipping {cam_name} (not in config)")
             continue
 
-        log_main(f"{'=' * 60}")
-        log_main(f"Processing camera: {cam_name}")
-        log_main(f"{'=' * 60}")
-
-        cam_folder = ensure_camera_folder(cam_name)
-        bars = wifi_bars(cam.wifi_strength)
-
-        log_main(f"  Battery: {getattr(cam, 'battery', 'N/A')}")
-        log_main(f"  Temperature: {getattr(cam, 'temperature', 'N/A')}")
-
-        image_bytes = None
-        source = "None"
-
-        # ============ FIX: Request new snapshot FIRST ============
+        # WRAP EACH CAMERA IN TRY/CATCH
         try:
-            log_main("  \U0001F4F8 Requesting new snapshot from camera...")
-            snap_result = await cam.snap_picture()
-
-            # Extract only useful info from the verbose response
-            if isinstance(snap_result, dict):
-                command_id = snap_result.get('id', 'unknown')
-                state = snap_result.get('state_condition', 'unknown')
-                log_main(f"  \u2705 Snapshot requested (ID: {command_id}, State: {state})")
-            else:
-                log_main(f"  \u2705 Snapshot requested")
-
-            # Wait a moment for the snapshot to be processed
-            await asyncio.sleep(3)
-
-            # Refresh camera to get the new image
-            await blink.refresh(force=True)
-
+            await process_single_camera(blink, cam_name, cam)
+            successful += 1
         except Exception as e:
-            log_main(f"  \u26A0\uFE0F Snapshot request failed: {type(e).__name__}: {e}")
-
-        # ============ Now get the media ============
-        try:
-            response = await cam.get_media()
-            if response.status == 200:
-                image_bytes = await response.read()
-                source = "get_media"
-                log_main(f"  \u2705 Downloaded {len(image_bytes)} bytes")
-            else:
-                log_main(f"  \u274C HTTP {response.status}")
-        except Exception as e:
-            log_main(f"  \u274C Download failed: {e}")
-
-        # ============ Fallback: Try thumbnail ============
-        if not image_bytes or len(image_bytes) < 1000:
-            try:
-                thumb_response = await cam.get_thumbnail()
-                if thumb_response.status == 200:
-                    image_bytes = await thumb_response.read()
-                    source = "thumbnail"
-                    log_main(f"  \u26A0\uFE0F Using thumbnail ({len(image_bytes)} bytes)")
-            except Exception as e:
-                log_main(f"  \u274C Thumbnail failed: {e}")
-
-        # ============ Save image using camera_organizer ============
-        if not image_bytes or len(image_bytes) < 1000:
-            # Placeholder if method fails
-            placeholder = Image.new("RGB", (640, 480), color=(255, 0, 0))
-            buffer = io.BytesIO()
-            placeholder.save(buffer, format='JPEG')
-            image_bytes = buffer.getvalue()
-            source = "placeholder"
-            log_main(f"  \u26A0\uFE0F No valid image data, using placeholder")
-
-        try:
-            # Verify image data is valid before saving
-            try:
-                img = Image.open(io.BytesIO(image_bytes))
-                img.verify()
-                log_main(f"  \u2705 Valid {img.format} image {img.size}")
-            except Exception as e:
-                log_main(f"  \u26A0\uFE0F Image validation failed: {e}")
-
-            # Use camera_organizer to save photo to date folder
-            photo_path = camera_organizer.save_photo_to_date_folder(
-                cam_folder,
-                image_bytes,
-                cam_name,
-                datetime.now()
-            )
-
-            # Verify file was actually written
-            if photo_path.exists():
-                actual_size = photo_path.stat().st_size
-                log_main(
-                    f"  \u2705 Saved: {photo_path.parent.name}/{photo_path.name} ({actual_size:,} bytes, {source})")
-            else:
-                log_main(f"  \u274C File not found after save!")
-
-        except Exception as e:
-            log_main(f"  \u274C Save error: {e}")
+            failed += 1
+            log_main(f"\u274C Error processing {cam_name}: {e}")
+            log_camera(cam_name, f"CRITICAL ERROR: {type(e).__name__}: {e}")
             import traceback
             log_main(traceback.format_exc())
+            # Continue to next camera instead of failing entire loop
 
-        # Log camera info to camera-specific log
-        log_entry = (
-            f"Temp: {cam.temperature}\u00B0F | Battery: {cam.battery} | "
-            f"WiFi: {bars}/5 | Source: {source}"
-        )
-        log_camera(cam_name, log_entry)
-
-        print(f"\n--- {cam_name} ---")
-        print(f"Temperature: {cam.temperature}\u00B0F")
-        print(f"Battery: {cam.battery}")
-        print(f"WiFi: {bars}/5")
-        print(f"Source: {source}")
-        print("----------------------\n")
+    # Log cycle summary
+    cycle_duration = time.time() - cycle_start
+    log_main("=" * 60)
+    log_main(f"Snapshot cycle complete: {successful} successful, {failed} failed")
+    log_main(f"Total cycle time: {cycle_duration:.2f}s")
+    log_main("=" * 60)
+    log_performance(f"snapshot_cycle | {cycle_duration:.2f}s | Success:{successful} Failed:{failed}")
 
 
 # ---------------- Main Blink Polling ---------------- #
@@ -422,11 +579,32 @@ async def poll_blink():
         await take_snapshot(blink)
         await wait_until_next_interval(POLL_INTERVAL)
 
+        # Main polling loop
+        loop_count = 0
         while True:
+            loop_count += 1
+            loop_start = time.time()
+
             try:
+                log_main(f"\n{'#' * 60}")
+                log_main(f"POLLING CYCLE #{loop_count}")
+                log_main(f"{'#' * 60}")
+
                 # STEP 1: Refresh blink connection and save token
-                await blink.refresh(force=True)
-                await blink.save(TOKEN_FILE)
+                token_start = time.time()
+                try:
+                    await asyncio.wait_for(blink.refresh(force=True), timeout=30)
+                    await blink.save(TOKEN_FILE)
+                    token_duration = time.time() - token_start
+                    log_performance(f"token_refresh | {token_duration:.2f}s | SUCCESS")
+                except asyncio.TimeoutError:
+                    token_duration = time.time() - token_start
+                    log_performance(f"token_refresh | {token_duration:.2f}s | TIMEOUT")
+                    log_main("\u26A0\uFE0F Token refresh timed out, continuing anyway...")
+                except Exception as e:
+                    token_duration = time.time() - token_start
+                    log_performance(f"token_refresh | {token_duration:.2f}s | ERROR")
+                    log_main(f"\u26A0\uFE0F Token refresh error: {e}")
 
                 # STEP 2: Check if token file was externally modified
                 current_token_mtime = os.path.getmtime(TOKEN_FILE)
@@ -446,32 +624,60 @@ async def poll_blink():
                     # Re-initialize camera objects after token refresh
                     log_token(f"  Re-initializing camera objects after token refresh...")
                     try:
-                        await blink.setup_post_verify()
-                        log_token(f"  Camera objects re-initialized successfully")
+                        reinit_start = time.time()
+                        await asyncio.wait_for(blink.setup_post_verify(), timeout=30)
+                        reinit_duration = time.time() - reinit_start
+                        log_performance(f"camera_reinit | {reinit_duration:.2f}s | SUCCESS")
+                        log_token(f"  Camera objects re-initialized successfully in {reinit_duration:.2f}s")
+                    except asyncio.TimeoutError:
+                        reinit_duration = time.time() - reinit_start
+                        log_performance(f"camera_reinit | {reinit_duration:.2f}s | TIMEOUT")
+                        log_token(f"  TIMEOUT re-initializing cameras after {reinit_duration:.2f}s")
                     except Exception as e:
                         log_token(f"  ERROR re-initializing cameras: {e}")
+                        log_performance(f"camera_reinit | ERROR: {e}")
 
                 # STEP 3: Take snapshot
                 log_main("Starting snapshot cycle...")
                 await take_snapshot(blink)
 
+                # Log loop cycle time
+                loop_duration = time.time() - loop_start
+                log_performance(f"poll_cycle | {loop_duration:.2f}s | Cycle#{loop_count}")
+                log_main(f"Poll cycle #{loop_count} completed in {loop_duration:.2f}s")
+
                 # STEP 4: Wait for next interval
                 await wait_until_next_interval(POLL_INTERVAL)
 
+            except KeyboardInterrupt:
+                log_main("Shutting down gracefully...")
+                break
             except Exception as e:
-                log_main(f"Error during polling loop: {e}")
+                loop_duration = time.time() - loop_start
+                log_performance(f"poll_cycle | {loop_duration:.2f}s | CRITICAL_ERROR")
+                log_main(f"\u274C Critical error in polling loop: {e}")
                 import traceback
                 log_main(traceback.format_exc())
-                await asyncio.sleep(30)
+                log_main("Waiting 60 seconds before retry...")
+                await asyncio.sleep(60)  # Longer wait on critical error
 
 
 # ---------------- Script Entry ---------------- #
 if __name__ == "__main__":
     CAMERAS_DIR.mkdir(parents=True, exist_ok=True)
     LOG_FOLDER.mkdir(parents=True, exist_ok=True)
-    log_main("Blink WebCam script started.")
+
+    log_main("=" * 70)
+    log_main("BLINK WEBCAM SCRIPT STARTED")
+    log_main("=" * 70)
     log_main(f"Log rotation enabled: keeps 5 days of history")
     log_main(f"Photo retention: keeps {MAX_DAYS} days of photos per camera")
+    log_main(f"Poll interval: {POLL_INTERVAL // 60} minutes")
+    log_main(f"Configured cameras: {len(CAMERAS)}")
+    log_main("=" * 70)
     log_main(f"Main log: {get_current_log_file(MAIN_LOG_FOLDER, 'main')}")
     log_main(f"Token log: {get_current_log_file(TOKEN_LOG_FOLDER, 'token')}")
+    log_main(f"Performance log: {get_current_log_file(PERF_LOG_FOLDER, 'performance')}")
+    log_main("=" * 70)
+
     asyncio.run(poll_blink())
