@@ -173,6 +173,7 @@ def get_most_recent_photo_time(camera_folder: Path) -> datetime | None:
 def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
     """
     Get latest log entry from most recent log file
+    Supports both flat and date-organized log structures
 
     Args:
         log_folder: Path to camera's log folder
@@ -183,18 +184,46 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
     """
     import re
 
-    # Pattern: {camera_name}_YYYY-MM-DD.log
-    pattern = re.compile(rf'^{re.escape(camera_name)}_(\d{{4}}-\d{{2}}-\d{{2}})\.log$')
+    # Pattern for date folders: YYYY-MM-DD
+    date_folder_pattern = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+
+    # Pattern for log files: {camera_name}_YYYY-MM-DD.log
+    log_file_pattern = re.compile(rf'^{re.escape(camera_name)}_(\d{{4}}-\d{{2}}-\d{{2}})\.log$')
 
     log_files = []
-    for file in log_folder.iterdir():
-        if file.is_file():
-            match = pattern.match(file.name)
+
+    # Check if log folder exists
+    if not log_folder.exists():
+        print(f"Log folder does not exist: {log_folder}")
+        return {
+            'temp': 'N/A',
+            'battery': 'N/A',
+            'wifi': 0,
+            'timestamp': 'N/A'
+        }
+
+    # Search for log files in both flat and date-organized structures
+    for item in log_folder.iterdir():
+        # Check if it's a date folder (e.g., "2025-11-23")
+        if item.is_dir() and date_folder_pattern.match(item.name):
+            date_str = item.name
+            # Look for log files inside the date folder
+            for log_file in item.glob(f"{camera_name}_*.log"):
+                if log_file.is_file():
+                    log_files.append((date_str, log_file))
+
+        # Also check for flat structure log files
+        elif item.is_file():
+            match = log_file_pattern.match(item.name)
             if match:
                 date_str = match.group(1)
-                log_files.append((date_str, file))
+                log_files.append((date_str, item))
+            # Check for non-dated log files (fallback)
+            elif item.name == f"{camera_name}.log":
+                log_files.append(("9999-99-99", item))
 
     if not log_files:
+        print(f"No log files found for {camera_name} in {log_folder}")
         return {
             'temp': 'N/A',
             'battery': 'N/A',
@@ -206,10 +235,11 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
     log_files.sort(key=lambda x: x[0], reverse=True)
     latest_log = log_files[0][1]
 
-    # Read last line
+    # Read and parse the log
     try:
         with open(latest_log, "r", encoding="utf-8", errors="ignore") as f:
             lines = f.readlines()
+
             if not lines:
                 return {
                     'temp': 'N/A',
@@ -218,20 +248,37 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
                     'timestamp': 'N/A'
                 }
 
-            last_line = lines[-1]
-            parts = last_line.split(" | ")
+            # FIX: Find the last line that contains camera data (not PERF lines)
+            camera_data_line = None
+            for line in reversed(lines):
+                if "Temp:" in line and "Battery:" in line and "WiFi:" in line:
+                    camera_data_line = line
+                    break
+
+            if not camera_data_line:
+                print(f"No camera data found in log: {latest_log}")
+                return {
+                    'temp': 'N/A',
+                    'battery': 'N/A',
+                    'wifi': 0,
+                    'timestamp': 'N/A'
+                }
+
+            parts = camera_data_line.split(" | ")
 
             temp = "N/A"
             battery = "N/A"
             wifi = 0
             timestamp = "N/A"
 
-            if len(parts) >= 4:
+            if len(parts) >= 2:
                 timestamp = parts[0]
+
                 for part in parts:
                     if "Temp:" in part:
                         temp_str = part.split("Temp:")[1].strip().split()[0]
-                        temp = temp_str.replace("\u00B0F", "").replace("\u00B0F", "")
+                        # Remove degree symbols
+                        temp = temp_str.replace("\u00B0F", "").replace("\u00B0", "").replace("F", "")
                         temp_clean = ""
                         for char in temp:
                             if char.isdigit() or char == '.' or char == '-':
@@ -255,8 +302,11 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
                 'wifi': wifi,
                 'timestamp': timestamp
             }
+
     except Exception as e:
         print(f"Error parsing log for {camera_name}: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             'temp': 'N/A',
             'battery': 'N/A',
@@ -472,51 +522,102 @@ def api_location():
     return jsonify(location)
 
 
-# REPLACE ONLY the @app.route('/api/weather') function in Blink_Web_Server.py
-# Find it around line 250 and replace the entire function
+# Replace the weather endpoint in Blink_Web_Server.py with this:
 
 @app.route('/api/weather')
 def api_weather():
-    """Weather API endpoint - proxies wttr.in to avoid CORS issues"""
+    """Weather API endpoint with fallback options"""
     try:
         location = get_location()
         city = location.get("city", "Bethel Park")
         state = location.get("state", "PA")
+        lat = location.get("lat", 40.3267)
+        lon = location.get("lon", -80.0171)
 
-        # Use the EXACT format that works in curl
-        location_query = f"{city},{state}"
-        url = f'https://wttr.in/{location_query}?format=j1'
+        # Try wttr.in first (simpler endpoint)
+        try:
+            response = requests.get(
+                f'https://wttr.in/{city},{state}?format=j1',
+                timeout=5,
+                headers={'User-Agent': 'Mozilla/5.0'}
+            )
 
-        print(f"Fetching weather from: {url}")
+            if response.status_code == 200:
+                data = response.json()
+                return jsonify(data)
+        except Exception as e:
+            print(f"wttr.in failed: {e}")
 
-        # Simple request with minimal headers (like curl)
-        response = requests.get(
-            url,
-            timeout=10
-        )
+        # Fallback to weather.gov (National Weather Service - free, no API key needed)
+        try:
+            # Get grid point first
+            points_response = requests.get(
+                f'https://api.weather.gov/points/{lat},{lon}',
+                timeout=5,
+                headers={
+                    'User-Agent': '(Blink Camera Monitor, contact@example.com)',
+                    'Accept': 'application/json'
+                }
+            )
 
-        print(f"Weather response status: {response.status_code}")
+            if points_response.status_code == 200:
+                points_data = points_response.json()
+                forecast_url = points_data['properties']['forecast']
+                obs_stations_url = points_data['properties']['observationStations']
 
-        if response.status_code == 200:
-            data = response.json()
-            print("Weather data received successfully")
-            return jsonify(data)
-        else:
-            print(f"Weather API returned status {response.status_code}")
-            print(f"Response: {response.text[:200]}")
-            raise Exception(f"HTTP {response.status_code}")
+                # Get current observations
+                stations_response = requests.get(obs_stations_url, timeout=5, headers={
+                    'User-Agent': '(Blink Camera Monitor, contact@example.com)',
+                    'Accept': 'application/json'
+                })
+
+                if stations_response.status_code == 200:
+                    stations_data = stations_response.json()
+                    if stations_data['features']:
+                        station_id = stations_data['features'][0]['properties']['stationIdentifier']
+
+                        obs_response = requests.get(
+                            f'https://api.weather.gov/stations/{station_id}/observations/latest',
+                            timeout=5,
+                            headers={
+                                'User-Agent': '(Blink Camera Monitor, contact@example.com)',
+                                'Accept': 'application/json'
+                            }
+                        )
+
+                        if obs_response.status_code == 200:
+                            obs_data = obs_response.json()
+                            props = obs_data['properties']
+
+                            # Convert to wttr.in format for compatibility
+                            temp_c = props['temperature']['value']
+                            temp_f = int(temp_c * 9 / 5 + 32) if temp_c else 0
+
+                            weather_desc = props.get('textDescription', 'Clear')
+                            humidity = props.get('relativeHumidity', {}).get('value', 0)
+
+                            formatted_data = {
+                                'current_condition': [{
+                                    'temp_F': str(temp_f),
+                                    'FeelsLikeF': str(temp_f),
+                                    'weatherDesc': [{'value': weather_desc}],
+                                    'humidity': str(int(humidity)) if humidity else '0'
+                                }]
+                            }
+
+                            return jsonify(formatted_data)
+        except Exception as e:
+            print(f"weather.gov failed: {e}")
+
+        # If all fails, return error
+        return jsonify({'error': 'All weather services unavailable'}), 503
 
     except Exception as e:
-        print(f'Weather error: {str(e)}')
-        # Return valid fallback data
-        return jsonify({
-            'current_condition': [{
-                'temp_F': '--',
-                'FeelsLikeF': '--',
-                'humidity': '--',
-                'weatherDesc': [{'value': 'Service Unavailable'}]
-            }]
-        }), 200
+        print(f"Weather error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 
 @app.route('/api/arm/status')
 def api_arm_status():
@@ -580,31 +681,37 @@ def api_snooze_all_status():
 @app.route('/api/snooze/set', methods=['POST'])
 def api_snooze_set():
     """Snooze a camera for a specified duration"""
-    data = request.get_json()
-    camera_name = data.get('camera_name')
-    duration_minutes = data.get('duration_minutes')
-
-    if not camera_name or duration_minutes is None:
-        return jsonify({"success": False, "error": "Missing camera_name or duration_minutes"}), 400
-
     try:
+        data = request.get_json()
+
+        camera_name = data.get('camera_name') if data else None
+        duration_minutes = data.get('duration_minutes') if data else None
+
+        if not camera_name or duration_minutes is None:
+            error_msg = "Missing camera_name or duration_minutes"
+            return jsonify({"success": False, "error": error_msg}), 400
+
         snooze_manager.snooze_camera(camera_name, duration_minutes)
         status = snooze_manager.get_snooze_status(camera_name)
         return jsonify({"success": True, "status": status})
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/snooze/all/set', methods=['POST'])
 def api_snooze_all_set():
     """Snooze all cameras for a specified duration"""
-    data = request.get_json()
-    duration_minutes = data.get('duration_minutes')
-
-    if duration_minutes is None:
-        return jsonify({"success": False, "error": "Missing duration_minutes"}), 400
-
     try:
+        data = request.get_json()
+
+        duration_minutes = data.get('duration_minutes') if data else None
+
+        if duration_minutes is None:
+            error_msg = "Missing duration_minutes"
+            return jsonify({"success": False, "error": error_msg}), 400
+
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
 
@@ -615,22 +722,28 @@ def api_snooze_all_set():
 
         return jsonify({"success": True, "count": len(camera_names)})
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/snooze/unset', methods=['POST'])
 def api_snooze_unset():
     """Remove snooze from a camera"""
-    data = request.get_json()
-    camera_name = data.get('camera_name')
-
-    if not camera_name:
-        return jsonify({"success": False, "error": "Missing camera_name"}), 400
-
     try:
+        data = request.get_json()
+
+        camera_name = data.get('camera_name') if data else None
+
+        if not camera_name:
+            error_msg = "Missing camera_name in request"
+            return jsonify({"success": False, "error": error_msg}), 400
+
         snooze_manager.unsnooze_camera(camera_name)
         return jsonify({"success": True})
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -641,6 +754,8 @@ def api_snooze_all_unset():
         snooze_manager.unsnooze_all_cameras()
         return jsonify({"success": True})
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({"success": False, "error": str(e)}), 500
 
 
@@ -688,7 +803,7 @@ def get_image(camera_name, image_path):
 
 if __name__ == '__main__':
     print("=" * 60)
-    print("\U0001F535 Blink Camera Web Server")
+    print("Blink Camera Web Server")
     print("=" * 60)
 
     local_ip = get_local_ip()
@@ -698,19 +813,19 @@ if __name__ == '__main__':
 
         logging.getLogger("waitress.queue").setLevel(logging.ERROR)
 
-        print("\u2705 Using Waitress production server")
-        print(f"\U0001F3E0 Local access:   http://localhost:5000")
-        print(f"\U0001F4F1 Network access: http://{local_ip}:5000")
+        print("Using Waitress production server")
+        print(f"Local access:   http://localhost:5000")
+        print(f"Network access: http://{local_ip}:5000")
         print("=" * 60)
-        print("\u26A1 Press Ctrl+C to stop the server")
+        print("Press Ctrl+C to stop the server")
         print("=" * 60)
         serve(app, host='0.0.0.0', port=5000, threads=6, channel_timeout=120, backlog=128)
     except ImportError:
-        print("\u26A0\uFE0F Waitress not found - using Flask development server")
-        print("\U0001F4E6 For production use, install Waitress:")
+        print("Waitress not found - using Flask development server")
+        print("For production use, install Waitress:")
         print("   pip install waitress")
         print("=" * 60)
-        print(f"\U0001F3E0 Local access:   http://localhost:5000")
-        print(f"\U0001F4F1 Network access: http://{local_ip}:5000")
+        print(f"Local access:   http://localhost:5000")
+        print(f"Network access: http://{local_ip}:5000")
         print("=" * 60)
         app.run(host='0.0.0.0', port=5000, debug=False)
