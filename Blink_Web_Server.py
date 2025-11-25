@@ -522,95 +522,39 @@ def api_location():
     return jsonify(location)
 
 
-# Replace the weather endpoint in Blink_Web_Server.py with this:
-
 @app.route('/api/weather')
 def api_weather():
-    """Weather API endpoint with fallback options"""
+    """Weather API endpoint using only wttr.in"""
     try:
         location = get_location()
         city = location.get("city", "Bethel Park")
         state = location.get("state", "PA")
-        lat = location.get("lat", 40.3267)
-        lon = location.get("lon", -80.0171)
 
-        # Try wttr.in first (simpler endpoint)
+        # Use wttr.in with 30 second timeout
         try:
             response = requests.get(
                 f'https://wttr.in/{city},{state}?format=j1',
-                timeout=5,
-                headers={'User-Agent': 'Mozilla/5.0'}
+                timeout=30,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
             )
 
             if response.status_code == 200:
                 data = response.json()
                 return jsonify(data)
+            else:
+                print(f"wttr.in returned status code: {response.status_code}")
+                return jsonify({'error': f'Weather service returned status {response.status_code}'}), 503
+
+        except requests.exceptions.Timeout:
+            print(f"wttr.in request timed out after 30 seconds")
+            return jsonify({'error': 'Weather service timed out'}), 504
+
         except Exception as e:
-            print(f"wttr.in failed: {e}")
-
-        # Fallback to weather.gov (National Weather Service - free, no API key needed)
-        try:
-            # Get grid point first
-            points_response = requests.get(
-                f'https://api.weather.gov/points/{lat},{lon}',
-                timeout=5,
-                headers={
-                    'User-Agent': '(Blink Camera Monitor, contact@example.com)',
-                    'Accept': 'application/json'
-                }
-            )
-
-            if points_response.status_code == 200:
-                points_data = points_response.json()
-                forecast_url = points_data['properties']['forecast']
-                obs_stations_url = points_data['properties']['observationStations']
-
-                # Get current observations
-                stations_response = requests.get(obs_stations_url, timeout=5, headers={
-                    'User-Agent': '(Blink Camera Monitor, contact@example.com)',
-                    'Accept': 'application/json'
-                })
-
-                if stations_response.status_code == 200:
-                    stations_data = stations_response.json()
-                    if stations_data['features']:
-                        station_id = stations_data['features'][0]['properties']['stationIdentifier']
-
-                        obs_response = requests.get(
-                            f'https://api.weather.gov/stations/{station_id}/observations/latest',
-                            timeout=5,
-                            headers={
-                                'User-Agent': '(Blink Camera Monitor, contact@example.com)',
-                                'Accept': 'application/json'
-                            }
-                        )
-
-                        if obs_response.status_code == 200:
-                            obs_data = obs_response.json()
-                            props = obs_data['properties']
-
-                            # Convert to wttr.in format for compatibility
-                            temp_c = props['temperature']['value']
-                            temp_f = int(temp_c * 9 / 5 + 32) if temp_c else 0
-
-                            weather_desc = props.get('textDescription', 'Clear')
-                            humidity = props.get('relativeHumidity', {}).get('value', 0)
-
-                            formatted_data = {
-                                'current_condition': [{
-                                    'temp_F': str(temp_f),
-                                    'FeelsLikeF': str(temp_f),
-                                    'weatherDesc': [{'value': weather_desc}],
-                                    'humidity': str(int(humidity)) if humidity else '0'
-                                }]
-                            }
-
-                            return jsonify(formatted_data)
-        except Exception as e:
-            print(f"weather.gov failed: {e}")
-
-        # If all fails, return error
-        return jsonify({'error': 'All weather services unavailable'}), 503
+            print(f"wttr.in failed: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'error': 'Weather service unavailable'}), 503
 
     except Exception as e:
         print(f"Weather error: {e}")
