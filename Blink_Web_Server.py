@@ -524,11 +524,33 @@ def api_location():
 
 @app.route('/api/weather')
 def api_weather():
-    """Weather API endpoint using only wttr.in"""
+    """Weather API endpoint using only wttr.in with Unicode sky icons"""
     try:
         location = get_location()
         city = location.get("city", "Bethel Park")
         state = location.get("state", "PA")
+
+        # Map weather descriptions to Unicode symbols
+        def weather_to_unicode(desc: str):
+            desc = desc.lower()
+            if any(x in desc for x in ["sunny", "clear"]):
+                return "\u2600"  # ☀ Sun
+            elif any(x in desc for x in ["partly cloudy", "cloudy", "few clouds"]):
+                return "\u26C5"  # ⛅ Sun behind cloud
+            elif "cloud" in desc:
+                return "\u2601"  # ☁ Cloud
+            elif "rain" in desc:
+                return "\u1F327"  # 🌧 Cloud with rain
+            elif "thunder" in desc:
+                return "\u26C8"  # ⛈ Thunderstorm
+            elif "snow" in desc:
+                return "\u2744"  # ❄ Snowflake
+            elif any(x in desc for x in ["night clear", "clear night"]):
+                return "\u263E"  # ☾ Crescent moon
+            elif "fog" in desc or "mist" in desc:
+                return "\u1F32B"  # 🌫 Fog (may render as emoji)
+            else:
+                return "\u2753"  # ❓ Unknown
 
         # Use wttr.in with 30 second timeout
         try:
@@ -541,26 +563,33 @@ def api_weather():
 
             if response.status_code == 200:
                 data = response.json()
+
+                # Extract current condition description
+                desc = data.get("current_condition", [{}])[0].get("weatherDesc", [{}])[0].get("value", "")
+                data['weather_icon'] = weather_to_unicode(desc)
+
                 return jsonify(data)
             else:
                 print(f"wttr.in returned status code: {response.status_code}")
-                return jsonify({'error': f'Weather service returned status {response.status_code}'}), 503
+                return jsonify({'error': f'Weather service returned status {response.status_code}',
+                                'weather_icon': "\u2753"}), 503
 
         except requests.exceptions.Timeout:
             print(f"wttr.in request timed out after 30 seconds")
-            return jsonify({'error': 'Weather service timed out'}), 504
+            return jsonify({'error': 'Weather service timed out', 'weather_icon': "\u2753"}), 504
 
         except Exception as e:
             print(f"wttr.in failed: {type(e).__name__}: {e}")
             import traceback
             traceback.print_exc()
-            return jsonify({'error': 'Weather service unavailable'}), 503
+            return jsonify({'error': 'Weather service unavailable', 'weather_icon': "\u2753"}), 503
 
     except Exception as e:
         print(f"Weather error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': str(e), 'weather_icon': "\u2753"}), 500
+
 
 
 @app.route('/api/arm/status')
