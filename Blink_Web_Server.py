@@ -470,6 +470,15 @@ def api_cameras():
     cameras = get_camera_data()
     return jsonify(cameras)
 
+@app.route('/api/cameras/refresh')
+def refresh_cameras():
+    """Return current camera data for AJAX refresh"""
+    try:
+        cameras_data = get_camera_data()
+        return jsonify({'success': True, 'cameras': cameras_data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/camera/<camera_name>/last_update')
 def api_camera_last_update(camera_name):
