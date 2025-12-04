@@ -782,6 +782,15 @@ def get_image(camera_name, image_path):
         return send_file(full_path, mimetype='image/jpeg')
     return "Image not found", 404
 
+@app.route('/api/cameras/refresh')
+def api_cameras_refresh():
+    """Return current camera data for AJAX refresh"""
+    try:
+        cameras_data = get_camera_data()
+        return jsonify({'success': True, 'cameras': cameras_data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     print("=" * 60)

@@ -1954,13 +1954,42 @@ setInterval(loadArmStatus, 10000);
 loadSnoozeAllStatus();
 setInterval(loadSnoozeAllStatus, 10000);
 
-setInterval(()=>{
-    document.body.style.transition = 'opacity 0.3s';
-    document.body.style.opacity = '0.8';
-    setTimeout(() => {
-        location.reload();
-    }, 300);
+// Refresh camera data without page reload
+async function refreshCameraData() {
+    console.log('Refreshing camera data...');
+    try {
+        const response = await fetch('/api/cameras/refresh');
+        const data = await response.json();
+        if (data.success && data.cameras) {
+            data.cameras.forEach(camera => {
+                const cameraName = camera.normalized_name;
+                const card = document.querySelector(`.camera-card[data-camera="${cameraName}"]`);
+                if (!card) return;
+
+                const tempEl = document.getElementById(`temp-${cameraName}`);
+                if (tempEl) {
+                    tempEl.textContent = camera.temperature;
+                    tempEl.closest('.stat').setAttribute('data-temperature', camera.temperature);
+                }
+
+                const batteryEl = document.getElementById(`battery-${cameraName}`);
+                if (batteryEl) {
+                    batteryEl.textContent = camera.battery;
+                    batteryEl.closest('.stat').setAttribute('data-battery', camera.battery);
+                }
+            });
+            checkBatteryLevels();
+            checkTemperatureLevels();
+        }
+    } catch (error) {
+        console.error('Error refreshing camera data:', error);
+    }
+}
+
+setInterval(() => {
+    refreshCameraData();
 }, 300000);
+
  // Live countdown for snooze badges
 function updateSnoozeCountdowns() {
     document.querySelectorAll('.snooze-badge[data-expiry]').forEach(badge => {

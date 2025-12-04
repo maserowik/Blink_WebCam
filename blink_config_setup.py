@@ -6,20 +6,71 @@ from blinkpy.blinkpy import Blink
 from blinkpy.auth import Auth
 from blinkpy.helpers.util import BlinkURLHandler
 
+CONFIG_FILE = "blink_config.json"
+TOKEN_FILE = "blink_token.json"
+
+async def get_radar_station_from_api(lat, lon, session):
+    """Get radar station from Weather.gov API"""
+    try:
+        url = f"https://api.weather.gov/points/{lat},{lon}"
+        headers = {"User-Agent": "BlinkRadar/1.0"}
+        async with session.get(url, headers=headers) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                return data['properties']['radarStation']
+            else:
+                print("\u26A0\uFE0F Weather.gov API returned status", resp.status)
+                return "KPBZ"
+    except Exception as e:
+        print("\u26A0\uFE0F Could not determine radar station:", e)
+        return "KPBZ"
 
 async def setup_config():
     """Query Blink API for cameras and create configuration file"""
 
-    TOKEN_FILE = "blink_token.json"
-    CONFIG_FILE = "blink_config.json"
+    # Check if config exists
+    if Path(CONFIG_FILE).exists():
+        print("=" * 60)
+        print("\u25B6 Existing configuration found")
+        print("  [V] View configuration")
+        print("  [R] Re-run setup")
+        choice = input("\nYour choice [V/R]: ").strip().upper()
 
-    # Check if token file exists
+        if choice == "V":
+            # Load and print summary
+            try:
+                with open(CONFIG_FILE, "r") as f:
+                    config = json.load(f)
+                print("=" * 60)
+                print("\u25B6 Configuration Summary")
+                print("=" * 60)
+                print("\u25B6 Cameras monitored:")
+                for cam in config.get("cameras", []):
+                    print(f"  \u2022 {cam}")
+                poll_interval = config.get("poll_interval", 300)
+                max_days = config.get("max_days", 7)
+                max_images = int((max_days * 24 * 60) / (poll_interval // 60))
+                print("\u23F1 Polling interval (seconds):", poll_interval)
+                print("\u25A1 Max days:", max_days)
+                print("\u25A1 Max images per camera (calculated):", max_images)
+                print("\u25B6 Carousel images:", config.get("carousel_images", 5))
+                loc = config.get("location", {})
+                print("\u25A0 Location:", loc.get("display", "Unknown"))
+                print("\u2600 Coordinates:", loc.get("lat", "N/A"), loc.get("lon", "N/A"))
+                print("\u25B6 Radar Station:", loc.get("radar_station", "KPBZ"))
+                print("=" * 60)
+            except Exception as e:
+                print("\u26A0\uFE0F Could not read configuration:", e)
+            return
+        elif choice == "R":
+            print("\n\u25B6 Re-running setup...\n")
+
+    # Check Blink token
     if not Path(TOKEN_FILE).exists():
-        print("\u274C Error: blink_token.json not found!")  # Cross mark
+        print("\u274C Error: blink_token.json not found!")
         print("Please run 'python blink_token.py' first to authenticate.")
         return
 
-    # Load token
     print("Loading authentication token...")
     with open(TOKEN_FILE, "r") as f:
         token_data = json.load(f)
@@ -29,11 +80,9 @@ async def setup_config():
     async with ClientSession() as session:
         blink = Blink(session=session)
 
-        # Extract region
         host_url = token_data.get("host", "")
         region_id = host_url.replace("https://rest-", "").replace(".immedia-semi.com", "")
 
-        # Setup authentication
         blink.auth = Auth({}, session=session, no_prompt=True)
         blink.auth.region_id = region_id
         blink.auth.host = host_url
@@ -47,35 +96,29 @@ async def setup_config():
         try:
             await blink.setup_post_verify()
 
-            # Get list of cameras from API
             camera_list = list(blink.cameras.keys())
-
             if not camera_list:
-                print("\u26A0\uFE0F  No cameras found on your Blink account!")
+                print("\u26A0\uFE0F No cameras found on your Blink account!")
                 return
 
             print("=" * 60)
-            print(f"\u2705 Found {len(camera_list)} camera(s):")  # Check mark
+            print("\u2705 Found", len(camera_list), "camera(s):")
             print("=" * 60)
             for i, cam_name in enumerate(camera_list, 1):
                 print(f"  {i}. {cam_name}")
             print("=" * 60)
 
-            # Ask user which cameras to monitor
-            print("\n\U0001F4F9 Camera Selection")  # Camera emoji
+            # --- Camera Selection ---
+            print("\n\u25B6 Camera Selection")
             print("-" * 60)
             print("Select cameras to monitor:")
             print("  [A] All cameras (default)")
             print("  [C] Choose specific cameras")
-
             choice = input("\nYour choice [A/C]: ").strip().upper()
-
             selected_cameras = []
             if choice == "C":
-                print("\nEnter camera numbers to monitor (comma-separated)")
-                print(f"Example: 1,3,4")
+                print("\nEnter camera numbers to monitor (comma-separated), e.g., 1,3,4")
                 selection = input("Camera numbers: ").strip()
-
                 try:
                     indices = [int(x.strip()) - 1 for x in selection.split(",")]
                     selected_cameras = [camera_list[i] for i in indices if 0 <= i < len(camera_list)]
@@ -85,15 +128,13 @@ async def setup_config():
             else:
                 selected_cameras = camera_list
 
-            print(f"\n\u2705 Selected {len(selected_cameras)} camera(s):")
+            print("\n\u2705 Selected Cameras:")
             for cam in selected_cameras:
-                print(f"  \u2022 {cam}")  # Bullet point
+                print(f"  \u2022 {cam}")
 
-            # Get user location
-            print("\n\U0001F4CD Location Settings")  # Pin emoji
+            # --- Location ---
+            print("\n\u25A0 Location Settings")
             print("-" * 60)
-            print("Enter your location for weather display:")
-
             city = input("City: ").strip()
             while not city:
                 print("\u274C City cannot be empty!")
@@ -107,27 +148,28 @@ async def setup_config():
             location = f"{city}, {state}"
             print(f"\n\u2705 Location set to: {location}")
 
-            # Geo-coordinate lookup
-            print("\n\U0001F310 Looking up coordinates for radar map...")  # Globe emoji
-
-            geocode_url = (
-                f"https://nominatim.openstreetmap.org/search?"
-                f"city={city}&state={state}&country=USA&format=json"
-            )
-
+            # --- Geocode and radar ---
+            print("\nLooking up coordinates for radar map...")
+            geocode_url = f"https://nominatim.openstreetmap.org/search?city={city}&state={state}&country=USA&format=json"
             async with session.get(geocode_url, headers={"User-Agent": "BlinkRadar/1.0"}) as resp:
                 data = await resp.json()
 
             if not data:
-                print("\u26A0\uFE0F Could not determine GPS coordinates, using 0,0")
-                lat, lon = 0.0, 0.0
+                print("\u26A0\uFE0F Could not determine GPS coordinates, using defaults")
+                lat, lon = 40.3267, -80.0171
+                radar_station = "KPBZ"
             else:
                 lat = float(data[0]["lat"])
                 lon = float(data[0]["lon"])
-                print(f"\U0001F4CD Coordinates found \u2192 LAT: {lat}, LON: {lon}")  # Pin and arrow
+                print(f"\u25B6 Coordinates found: LAT = {lat}, LON = {lon}")
 
-            # Get polling interval
-            print("\n\u23F1\uFE0F  Polling Interval")  # Stopwatch emoji
+                # Get radar station from Weather.gov API
+                print("Looking up nearest radar station...")
+                radar_station = await get_radar_station_from_api(lat, lon, session)
+                print(f"\u25B6 Radar station selected: {radar_station}")
+
+            # --- Polling Interval ---
+            print("\nPolling Interval")
             print("-" * 60)
             print("How often should snapshots be taken?")
             print("  [1] Every 1 minute")
@@ -136,87 +178,69 @@ async def setup_config():
             print("  [15] Every 15 minutes")
             print("  [30] Every 30 minutes")
             print("  [60] Every 60 minutes")
-
             poll_input = input("\nMinutes [5]: ").strip()
             poll_minutes = int(poll_input) if poll_input else 5
             poll_interval = poll_minutes * 60
 
-            # Get max images per camera
-            print("\n\U0001F4BE Image Storage")  # Floppy disk emoji
+            # --- Image Storage ---
+            print("\nImage Storage")
             print("-" * 60)
-            print("Maximum images to keep per camera:")
-            print(f"  At {poll_minutes} min intervals:")
-            print(f"    \u2022 1440 images = 1 day")
-            print(f"    \u2022 10080 images = 1 week (default)")
-            print(f"    \u2022 43200 images = 1 month")
+            print("How many days of images should be saved?")
+            print("  1  = 1 day")
+            print("  7  = 7 days (default)")
+            print(" 14  = 14 days")
+            print(" 30  = 30 days")
+            days_input = input("\nDays [7]: ").strip()
+            max_days = int(days_input) if days_input else 7
+            max_images = int((max_days * 24 * 60) / poll_minutes)
+            print("Estimated images per camera:", max_images)
 
-            max_input = input("\nMax images [10080]: ").strip()
-            max_images = int(max_input) if max_input else 10080
-
-            # Calculate storage estimate
-            days = (max_images * poll_minutes) / (60 * 24)
-            print(
-                f"\n\U0001F4CA This will store approximately {days:.1f} days of history per camera")  # Bar chart emoji
-
-            # Get carousel images setting
-            print("\n\U0001F3A0 Carousel Display")  # Carousel horse emoji
+            # --- Carousel ---
+            print("\nCarousel Display")
             print("-" * 60)
             print("How many recent images to show in the web carousel?")
-            print("  \u2022 3 images = Minimal")
-            print("  \u2022 5 images = Default (recommended)")
-            print("  \u2022 10 images = Maximum")
-
+            print("  3 images ")
+            print("  5 images (default)")
+            print(" 10 images ")
             carousel_input = input("\nCarousel images [5]: ").strip()
             carousel_images = int(carousel_input) if carousel_input else 5
-
             if carousel_images < 1:
                 carousel_images = 1
             elif carousel_images > 20:
                 carousel_images = 20
-                print(f"\u26A0\uFE0F  Limited to maximum of 20 images")
+                print("\u26A0\uFE0F Limited to maximum of 20 images")
 
-          
-            # Create configuration
+            # --- Save Config ---
             config = {
                 "cameras": selected_cameras,
                 "poll_interval": poll_interval,
-                "max_images": max_images,
+                "max_days": max_days,
                 "carousel_images": carousel_images,
                 "location": {
                     "city": city,
                     "state": state,
                     "display": location,
                     "lat": lat,
-                    "lon": lon
+                    "lon": lon,
+                    "radar_station": radar_station
                 },
             }
 
-            # Save configuration
             with open(CONFIG_FILE, "w") as f:
                 json.dump(config, f, indent=4)
 
             print("\n" + "=" * 60)
             print("\u2705 Configuration saved to blink_config.json")
             print("=" * 60)
-            print(f"\U0001F4F9 Monitoring {len(selected_cameras)} camera(s)")
-            print(f"\U0001F4CD Location: {location}")
-            print(f"\U0001F310 Coordinates: {lat}, {lon}")
-            print(f"\u23F1\uFE0F  Snapshot interval: {poll_minutes} minutes")
-            print(f"\U0001F4BE Max images per camera: {max_images}")
-            print(f"\U0001F3A0 Carousel images: {carousel_images}")
-
-       
-            print("=" * 60)
-            print("\n\U0001F680 Ready to start! Run: python Blink_WebCam.py")  # Rocket emoji
 
         except Exception as e:
-            print(f"\n\u274C Error connecting to Blink API: {e}")
+            print("\u274C Error connecting to Blink API:", e)
             import traceback
             traceback.print_exc()
 
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("\U0001F3A5 Blink Camera Configuration Setup")
+    print("\u25B6 Blink Camera Configuration Setup")
     print("=" * 60)
     asyncio.run(setup_config())
