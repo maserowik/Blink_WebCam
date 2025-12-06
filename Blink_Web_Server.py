@@ -470,6 +470,7 @@ def api_cameras():
     cameras = get_camera_data()
     return jsonify(cameras)
 
+
 @app.route('/api/cameras/refresh')
 def refresh_cameras():
     """Return current camera data for AJAX refresh"""
@@ -533,72 +534,158 @@ def api_location():
 
 @app.route('/api/weather')
 def api_weather():
-    """Weather API endpoint using only wttr.in with Unicode sky icons"""
+    """Weather API endpoint using weather.gov (NWS) with Unicode symbols"""
     try:
         location = get_location()
-        city = location.get("city", "Bethel Park")
-        state = location.get("state", "PA")
+        lat = location.get("lat", 40.3267)
+        lon = location.get("lon", -80.0171)
 
-        # Map weather descriptions to Unicode symbols
+        # Map weather descriptions to Unicode symbols (NO EMOJI)
         def weather_to_unicode(desc: str):
             desc = desc.lower()
-            if any(x in desc for x in ["sunny", "clear"]):
+            if any(x in desc for x in ["sunny", "clear", "fair"]):
                 return "\u2600"  # ☀ Sun
-            elif any(x in desc for x in ["partly cloudy", "cloudy", "few clouds"]):
+            elif "partly cloudy" in desc or "partly sunny" in desc:
                 return "\u26C5"  # ⛅ Sun behind cloud
-            elif "cloud" in desc:
+            elif "cloudy" in desc or "overcast" in desc:
                 return "\u2601"  # ☁ Cloud
-            elif "rain" in desc:
-                return "\u1F327"  # 🌧 Cloud with rain
-            elif "thunder" in desc:
+            elif "rain" in desc or "shower" in desc or "drizzle" in desc:
+                return "\u2614"  # ☂ Umbrella with rain drops
+            elif "thunder" in desc or "storm" in desc:
                 return "\u26C8"  # ⛈ Thunderstorm
-            elif "snow" in desc:
+            elif "snow" in desc or "flurries" in desc:
                 return "\u2744"  # ❄ Snowflake
-            elif any(x in desc for x in ["night clear", "clear night"]):
-                return "\u263E"  # ☾ Crescent moon
             elif "fog" in desc or "mist" in desc:
-                return "\u1F32B"  # 🌫 Fog (may render as emoji)
+                return "\u2248"  # ≈ Almost equal (represents fog)
+            elif "wind" in desc:
+                return "\u2248"  # ≈ Wavy lines (represents wind)
             else:
-                return "\u2753"  # ❓ Unknown
+                return "\u25CF"  # ● Black circle (unknown)
 
-        # Use wttr.in with 30 second timeout
+        # Use weather.gov API with reduced timeout
         try:
+            # Step 1: Get grid coordinates
+            points_url = f'https://api.weather.gov/points/{lat},{lon}'
             response = requests.get(
-                f'https://wttr.in/{city},{state}?format=j1',
-                timeout=30,
-                headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+                points_url,
+                timeout=5,  # Reduced from 30 to 5 seconds
+                headers={'User-Agent': 'BlinkCameraMonitor/1.0'}
             )
 
-            if response.status_code == 200:
-                data = response.json()
+            if response.status_code != 200:
+                print(f"weather.gov points API returned status: {response.status_code}")
+                raise Exception(f"Points API failed with status {response.status_code}")
 
-                # Extract current condition description
-                desc = data.get("current_condition", [{}])[0].get("weatherDesc", [{}])[0].get("value", "")
-                data['weather_icon'] = weather_to_unicode(desc)
+            points_data = response.json()
+            forecast_url = points_data['properties']['forecast']
 
-                return jsonify(data)
-            else:
-                print(f"wttr.in returned status code: {response.status_code}")
-                return jsonify({'error': f'Weather service returned status {response.status_code}',
-                                'weather_icon': "\u2753"}), 503
+            # Step 2: Get forecast
+            forecast_response = requests.get(
+                forecast_url,
+                timeout=5,
+                headers={'User-Agent': 'BlinkCameraMonitor/1.0'}
+            )
+
+            if forecast_response.status_code != 200:
+                print(f"weather.gov forecast API returned status: {forecast_response.status_code}")
+                raise Exception(f"Forecast API failed with status {forecast_response.status_code}")
+
+            forecast_data = forecast_response.json()
+            current_period = forecast_data['properties']['periods'][0]
+
+            # Extract weather data
+            temp_f = current_period['temperature']
+            condition = current_period['shortForecast']
+            detailed = current_period['detailedForecast']
+            wind_speed = current_period['windSpeed']
+            wind_direction = current_period['windDirection']
+
+            # Get Unicode icon
+            weather_icon = weather_to_unicode(condition)
+
+            # Return in a format compatible with the frontend
+            return jsonify({
+                'current_condition': [{
+                    'temp_F': str(temp_f),
+                    'FeelsLikeF': str(temp_f),  # NWS doesn't provide feels-like
+                    'weatherDesc': [{'value': condition}],
+                    'humidity': 'N/A',  # NWS current conditions don't include humidity
+                    'windspeedMiles': wind_speed,
+                    'winddir16Point': wind_direction
+                }],
+                'weather_icon': weather_icon,
+                'source': 'weather.gov'
+            })
 
         except requests.exceptions.Timeout:
-            print(f"wttr.in request timed out after 30 seconds")
-            return jsonify({'error': 'Weather service timed out', 'weather_icon': "\u2753"}), 504
+            print(f"weather.gov request timed out after 5 seconds")
+            raise Exception('Weather service timed out')
 
         except Exception as e:
-            print(f"wttr.in failed: {type(e).__name__}: {e}")
-            import traceback
-            traceback.print_exc()
-            return jsonify({'error': 'Weather service unavailable', 'weather_icon': "\u2753"}), 503
+            print(f"weather.gov failed: {type(e).__name__}: {e}")
+            raise
 
     except Exception as e:
         print(f"Weather error: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e), 'weather_icon': "\u2753"}), 500
+        return jsonify({
+            'error': str(e),
+            'weather_icon': "\u25CF",  # ● Black circle
+            'current_condition': [{
+                'temp_F': '--',
+                'FeelsLikeF': '--',
+                'weatherDesc': [{'value': 'Service Unavailable'}],
+                'humidity': 'N/A'
+            }]
+        }), 503
 
+
+@app.route('/api/radar')
+def api_radar():
+    """Radar API endpoint using weather.gov radar images"""
+    try:
+        location = get_location()
+        lat = location.get("lat", 40.3267)
+        lon = location.get("lon", -80.0171)
+
+        # Get nearest radar station
+        try:
+            points_url = f'https://api.weather.gov/points/{lat},{lon}'
+            response = requests.get(
+                points_url,
+                timeout=5,
+                headers={'User-Agent': 'BlinkCameraMonitor/1.0'}
+            )
+
+            if response.status_code == 200:
+                points_data = response.json()
+                radar_station = points_data['properties']['radarStation']
+
+                # Return radar image URL
+                radar_url = f'https://radar.weather.gov/ridge/standard/{radar_station}_loop.gif'
+
+                return jsonify({
+                    'radar_url': radar_url,
+                    'radar_station': radar_station,
+                    'success': True
+                })
+            else:
+                raise Exception(f"Points API failed with status {response.status_code}")
+
+        except Exception as e:
+            print(f"Radar API error: {e}")
+            return jsonify({
+                'error': str(e),
+                'success': False
+            }), 503
+
+    except Exception as e:
+        print(f"Radar error: {e}")
+        return jsonify({
+            'error': str(e),
+            'success': False
+        }), 500
 
 
 @app.route('/api/arm/status')
@@ -781,15 +868,6 @@ def get_image(camera_name, image_path):
     if full_path.exists():
         return send_file(full_path, mimetype='image/jpeg')
     return "Image not found", 404
-
-@app.route('/api/cameras/refresh')
-def api_cameras_refresh():
-    """Return current camera data for AJAX refresh"""
-    try:
-        cameras_data = get_camera_data()
-        return jsonify({'success': True, 'cameras': cameras_data})
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == '__main__':

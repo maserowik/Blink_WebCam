@@ -1607,7 +1607,6 @@ async function refreshSnoozeBadges() {
         }
     }
 
-    // Also refresh global snooze all status
     await loadSnoozeAllStatus();
 }
 
@@ -1864,122 +1863,54 @@ Object.keys(cameras).forEach(cameraName => {
 
 // Weather widget with dynamic location from config
 const WEATHER_LOCATION = "{{ location.display if location else 'Bethel Park, PA' }}";
-const WEATHER_CITY = "{{ location.city if location else 'Bethel Park' }}";
-const WEATHER_STATE = "{{ location.state if location else 'PA' }}";
-const WEATHER_LAT = "{{ location.lat | default(40.3267) }}";
-const WEATHER_LON = "{{ location.lon | default(-80.0171) }}";
+const WEATHER_LAT = {{ location.lat | default(40.3267) }};
+const WEATHER_LON = {{ location.lon | default(-80.0171) }};
 
 async function fetchWeather(){
     const widget=document.getElementById('weather-widget');
+    if(!widget)return;
+    widget.innerHTML='<div class="weather-loading">Loading weather...</div>';
     try{
-        const resp=await fetch('/api/weather', {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
-            }
-        });
-
-        if (!resp.ok) {
-            throw new Error(`HTTP error! status: ${resp.status}`);
-        }
-
+        const resp=await fetch('/api/weather',{method:'GET',headers:{'Accept':'application/json'}});
+        if(!resp.ok)throw new Error(`HTTP ${resp.status}`);
         const data=await resp.json();
-
-        if (data.error || !data.current_condition || !data.current_condition[0]) {
-            throw new Error('Invalid weather data format');
-        }
-
+        if(!data.current_condition||!data.current_condition[0])throw new Error('Invalid data');
         const current=data.current_condition[0];
-        const iconMap={
-            'Sunny':'&#x2600;&#xFE0F;',
-            'Clear':'&#x1F319;',
-            'Partly cloudy':'&#x26C5;',
-            'Cloudy':'&#x2601;&#xFE0F;',
-            'Overcast':'&#x2601;&#xFE0F;',
-            'Mist':'&#x1F32B;&#xFE0F;',
-            'Fog':'&#x1F32B;&#xFE0F;',
-            'Light rain':'&#x1F327;&#xFE0F;',
-            'Moderate rain':'&#x1F327;&#xFE0F;',
-            'Heavy rain':'&#x26C8;&#xFE0F;',
-            'Light snow':'&#x1F328;&#xFE0F;',
-            'Heavy snow':'&#x2744;&#xFE0F;',
-            'Thunderstorm':'&#x26C8;&#xFE0F;'
-        };
-        const icon=iconMap[current.weatherDesc[0].value]||'&#x1F321;&#xFE0F;';
+        const icon=data.weather_icon||'\u25CF';
         const tempF=current.temp_F;
         const feelsLike=current.FeelsLikeF;
         const condition=current.weatherDesc[0].value;
         const humidity=current.humidity;
-        widget.innerHTML=`
-            <div class="weather-main">
-                <div class="weather-icon">${icon}</div>
-                <div>
-                    <div class="weather-temp">${tempF}\u00B0F</div>
-                    <div class="weather-details">Feels ${feelsLike}\u00B0F</div>
-                </div>
-            </div>
-            <div class="weather-details">
-                <div class="weather-location">${WEATHER_LOCATION}</div>
-                <div class="weather-condition">${condition}</div>
-                <div>Humidity: ${humidity}%</div>
-            </div>
-        `;
+        widget.innerHTML=`<div class="weather-main"><div class="weather-icon">${icon}</div><div><div class="weather-temp">${tempF}\u00B0F</div><div class="weather-details">Feels ${feelsLike}\u00B0F</div></div></div><div class="weather-details"><div class="weather-location">${WEATHER_LOCATION}</div><div class="weather-condition">${condition}</div>${humidity!=='N/A'?`<div>Humidity: ${humidity}%</div>`:''}</div>`;
     }catch(e){
-        console.error('Weather fetch error:', e);
-        widget.innerHTML=`
-            <div class="weather-main">
-                <div class="weather-icon">&#x1F321;&#xFE0F;</div>
-                <div>
-                    <div class="weather-temp">--&#xB0;F</div>
-                    <div class="weather-details">Service unavailable</div>
-                </div>
-            </div>
-            <div class="weather-details">
-                <div class="weather-location">${WEATHER_LOCATION}</div>
-                <div style="font-size:0.8em;opacity:0.8;">Weather service temporarily unavailable</div>
-            </div>
-        `;
+        console.error('Weather error:',e);
+        widget.innerHTML=`<div class="weather-main"><div class="weather-icon">\u25CF</div><div><div class="weather-temp">--\u00B0F</div><div class="weather-details">Unavailable</div></div></div><div class="weather-details"><div class="weather-location">${WEATHER_LOCATION}</div></div>`;
     }
 }
 
-// Weather.gov radar widget with dynamic location from config
-const RADAR_STATION = "{{ location.radar_station if location else 'KPBZ' }}";
-
-function loadWeatherGovRadar(){
-    const widget = document.getElementById('radar-widget');
-
-    // Weather.gov radar image URL
-    const radarUrl = `https://radar.weather.gov/ridge/standard/${RADAR_STATION}_loop.gif`;
-
-    // Create image element with error handling
-    const img = new Image();
-    img.onload = function() {
-        widget.innerHTML = `
-            <img src="${radarUrl}" alt="Weather Radar">
-            <div class="radar-label">📡 ${RADAR_STATION} Radar</div>
-        `;
-    };
-    img.onerror = function() {
-        widget.innerHTML = `
-            <div class="radar-loading">
-                <div>📡</div>
-                <div style="margin-top:10px;">Radar temporarily unavailable</div>
-                <div style="font-size:0.8em;margin-top:5px;opacity:0.7;">${RADAR_STATION}</div>
-            </div>
-        `;
-    };
-    img.src = radarUrl;
+async function loadRadarWidget(){
+    const widget=document.getElementById('radar-widget');
+    if(!widget)return;
+    widget.innerHTML='<div class="radar-loading">Loading radar...</div>';
+    try{
+        const resp=await fetch('/api/radar');
+        if(!resp.ok)throw new Error('Radar failed');
+        const data=await resp.json();
+        if(data.success&&data.radar_url){
+            widget.innerHTML=`<img src="${data.radar_url}" alt="Radar"><div class="radar-label">\u{1F4E1} ${data.radar_station} Radar</div>`;
+        }else{
+            throw new Error('No radar');
+        }
+    }catch(e){
+        console.error('Radar error:',e);
+        widget.innerHTML='<div class="radar-loading"><div>\u{1F4E1}</div><div style="margin-top:10px;">Radar unavailable</div></div>';
+    }
 }
 
-loadWeatherGovRadar();
-// Refresh radar every 5 minutes (Weather.gov updates approximately every 4-6 minutes)
-setInterval(() => {
-    loadWeatherGovRadar();
-}, 300000);
-
-
 fetchWeather();
-setInterval(fetchWeather, 900000);
+loadRadarWidget();
+setInterval(fetchWeather,900000);
+setInterval(loadRadarWidget,300000);
 
 loadArmStatus();
 setInterval(loadArmStatus, 10000);
