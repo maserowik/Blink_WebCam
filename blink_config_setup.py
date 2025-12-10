@@ -9,6 +9,7 @@ from blinkpy.helpers.util import BlinkURLHandler
 CONFIG_FILE = "blink_config.json"
 TOKEN_FILE = "blink_token.json"
 
+
 async def get_radar_station_from_api(lat, lon, session):
     """Get radar station from Weather.gov API"""
     try:
@@ -24,6 +25,7 @@ async def get_radar_station_from_api(lat, lon, session):
     except Exception as e:
         print("\u26A0\uFE0F Could not determine radar station:", e)
         return "KPBZ"
+
 
 async def setup_config():
     """Query Blink API for cameras and create configuration file"""
@@ -58,6 +60,16 @@ async def setup_config():
                 print("\u25A0 Location:", loc.get("display", "Unknown"))
                 print("\u2600 Coordinates:", loc.get("lat", "N/A"), loc.get("lon", "N/A"))
                 print("\u25B6 Radar Station:", loc.get("radar_station", "KPBZ"))
+
+                # NEW: Radar configuration
+                radar = config.get("radar", {})
+                print("\n\u25B6 RADAR CONFIGURATION:")
+                print(f"  Enabled: {radar.get('enabled', False)}")
+                print(f"  Animation frames: {radar.get('frames', 5)}")
+                print(f"  Zoom level: {radar.get('zoom', 7)}")
+                if radar.get('mapbox_token'):
+                    print(f"  Mapbox token: {radar['mapbox_token'][:20]}...")
+
                 print("=" * 60)
             except Exception as e:
                 print("\u26A0\uFE0F Could not read configuration:", e)
@@ -210,6 +222,70 @@ async def setup_config():
                 carousel_images = 20
                 print("\u26A0\uFE0F Limited to maximum of 20 images")
 
+            # --- NEW: Radar Configuration ---
+            print("\n\u25B6 Weather Radar Configuration")
+            print("-" * 60)
+            print("This will replace the Windy iframe with PiClock-style animated radar")
+            print("Do you want to enable animated weather radar?")
+            print("  [Y] Yes - Enable radar (requires FREE Mapbox API key)")
+            print("  [N] No - Keep using Windy iframe")
+            radar_choice = input("\nEnable radar? [Y/N]: ").strip().upper()
+
+            radar_config = {
+                "enabled": False,
+                "zoom": 7,
+                "frames": 5,
+                "color": 2,
+                "smooth": 1,
+                "snow": 1,
+                "mapbox_token": "",
+                "basemap_style": "",
+                "overlay_style": ""
+            }
+
+            if radar_choice == "Y":
+                print("\n\u25B6 Radar requires a Mapbox API key (free tier available)")
+                print("Get your free API key at: https://account.mapbox.com/")
+                print("Sign up and create an access token with default scopes")
+
+                mapbox_token = input("\nEnter Mapbox API token: ").strip()
+                if mapbox_token:
+                    radar_config["enabled"] = True
+                    radar_config["mapbox_token"] = mapbox_token
+
+                    print("\n\u25B6 Radar Zoom Level")
+                    print("  4  = Continental view")
+                    print("  7  = Regional view (default)")
+                    print(" 10  = Local view")
+                    zoom_input = input("\nZoom level [7]: ").strip()
+                    radar_config["zoom"] = int(zoom_input) if zoom_input else 7
+
+                    print("\n\u25B6 Animation Frames")
+                    print("Number of time steps to show (more = longer animation)")
+                    print("  3 frames = 30 minutes of history")
+                    print("  5 frames = 50 minutes of history (default)")
+                    print("  8 frames = 80 minutes of history")
+                    frames_input = input("\nFrames [5]: ").strip()
+                    radar_config["frames"] = int(frames_input) if frames_input else 5
+
+                    print("\n\u25B6 Custom Mapbox Styles (optional)")
+                    print("Leave blank to use default styles")
+                    print("Example: 'username/style-id' or 'mapbox/dark-v11'")
+
+                    basemap = input("\nBase map style (dark map, no labels) [blank for default]: ").strip()
+                    if basemap:
+                        radar_config["basemap_style"] = basemap
+
+                    overlay = input("Overlay style (transparent, labels only) [blank for default]: ").strip()
+                    if overlay:
+                        radar_config["overlay_style"] = overlay
+
+                    print("\n\u2705 Radar configured successfully!")
+                else:
+                    print("\u26A0\uFE0F No API token provided, radar disabled")
+            else:
+                print("\u25B6 Radar disabled")
+
             # --- Save Config ---
             config = {
                 "cameras": selected_cameras,
@@ -224,6 +300,7 @@ async def setup_config():
                     "lon": lon,
                     "radar_station": radar_station
                 },
+                "radar": radar_config
             }
 
             with open(CONFIG_FILE, "w") as f:
@@ -232,9 +309,19 @@ async def setup_config():
             print("\n" + "=" * 60)
             print("\u2705 Configuration saved to blink_config.json")
             print("=" * 60)
+            print("\nConfiguration Summary:")
+            print(f"  Cameras: {len(selected_cameras)}")
+            print(f"  Poll interval: {poll_minutes} minutes")
+            print(f"  Image retention: {max_days} days")
+            print(f"  Carousel images: {carousel_images}")
+            print(f"  Radar enabled: {radar_config['enabled']}")
+            if radar_config['enabled']:
+                print(f"    Zoom: {radar_config['zoom']}")
+                print(f"    Frames: {radar_config['frames']}")
+            print("=" * 60)
 
         except Exception as e:
-            print("\u274C Error connecting to Blink API:", e)
+            print("\u274C Error during Blink setup:", e)
             import traceback
             traceback.print_exc()
 
