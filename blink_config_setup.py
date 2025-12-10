@@ -20,10 +20,10 @@ async def get_radar_station_from_api(lat, lon, session):
                 data = await resp.json()
                 return data['properties']['radarStation']
             else:
-                print("\u26A0\uFE0F Weather.gov API returned status", resp.status)
+                print("⚠️ Weather.gov API returned status", resp.status)
                 return "KPBZ"
     except Exception as e:
-        print("\u26A0\uFE0F Could not determine radar station:", e)
+        print("⚠️ Could not determine radar station:", e)
         return "KPBZ"
 
 
@@ -33,7 +33,7 @@ async def setup_config():
     # Check if config exists
     if Path(CONFIG_FILE).exists():
         print("=" * 60)
-        print("\u25B6 Existing configuration found")
+        print("▶ Existing configuration found")
         print("  [V] View configuration")
         print("  [R] Re-run setup")
         choice = input("\nYour choice [V/R]: ").strip().upper()
@@ -44,26 +44,26 @@ async def setup_config():
                 with open(CONFIG_FILE, "r") as f:
                     config = json.load(f)
                 print("=" * 60)
-                print("\u25B6 Configuration Summary")
+                print("▶ Configuration Summary")
                 print("=" * 60)
-                print("\u25B6 Cameras monitored:")
+                print("▶ Cameras monitored:")
                 for cam in config.get("cameras", []):
-                    print(f"  \u2022 {cam}")
+                    print(f"  • {cam}")
                 poll_interval = config.get("poll_interval", 300)
                 max_days = config.get("max_days", 7)
                 max_images = int((max_days * 24 * 60) / (poll_interval // 60))
-                print("\u23F1 Polling interval (seconds):", poll_interval)
-                print("\u25A1 Max days:", max_days)
-                print("\u25A1 Max images per camera (calculated):", max_images)
-                print("\u25B6 Carousel images:", config.get("carousel_images", 5))
+                print("⏱ Polling interval (seconds):", poll_interval)
+                print("□ Max days:", max_days)
+                print("□ Max images per camera (calculated):", max_images)
+                print("▶ Carousel images:", config.get("carousel_images", 5))
                 loc = config.get("location", {})
-                print("\u25A0 Location:", loc.get("display", "Unknown"))
-                print("\u2600 Coordinates:", loc.get("lat", "N/A"), loc.get("lon", "N/A"))
-                print("\u25B6 Radar Station:", loc.get("radar_station", "KPBZ"))
+                print("■ Location:", loc.get("display", "Unknown"))
+                print("☀ Coordinates:", loc.get("lat", "N/A"), loc.get("lon", "N/A"))
+                print("▶ Radar Station:", loc.get("radar_station", "KPBZ"))
 
-                # NEW: Radar configuration
+                # Radar configuration
                 radar = config.get("radar", {})
-                print("\n\u25B6 RADAR CONFIGURATION:")
+                print("\n▶ RADAR CONFIGURATION:")
                 print(f"  Enabled: {radar.get('enabled', False)}")
                 print(f"  Animation frames: {radar.get('frames', 5)}")
                 print(f"  Zoom level: {radar.get('zoom', 7)}")
@@ -72,14 +72,14 @@ async def setup_config():
 
                 print("=" * 60)
             except Exception as e:
-                print("\u26A0\uFE0F Could not read configuration:", e)
+                print("⚠️ Could not read configuration:", e)
             return
         elif choice == "R":
-            print("\n\u25B6 Re-running setup...\n")
+            print("\n▶ Re-running setup...\n")
 
     # Check Blink token
     if not Path(TOKEN_FILE).exists():
-        print("\u274C Error: blink_token.json not found!")
+        print("❌ Error: blink_token.json not found!")
         print("Please run 'python blink_token.py' first to authenticate.")
         return
 
@@ -110,18 +110,18 @@ async def setup_config():
 
             camera_list = list(blink.cameras.keys())
             if not camera_list:
-                print("\u26A0\uFE0F No cameras found on your Blink account!")
+                print("⚠️ No cameras found on your Blink account!")
                 return
 
             print("=" * 60)
-            print("\u2705 Found", len(camera_list), "camera(s):")
+            print("✅ Found", len(camera_list), "camera(s):")
             print("=" * 60)
             for i, cam_name in enumerate(camera_list, 1):
                 print(f"  {i}. {cam_name}")
             print("=" * 60)
 
             # --- Camera Selection ---
-            print("\n\u25B6 Camera Selection")
+            print("\n▶ Camera Selection")
             print("-" * 60)
             print("Select cameras to monitor:")
             print("  [A] All cameras (default)")
@@ -140,25 +140,25 @@ async def setup_config():
             else:
                 selected_cameras = camera_list
 
-            print("\n\u2705 Selected Cameras:")
+            print("\n✅ Selected Cameras:")
             for cam in selected_cameras:
-                print(f"  \u2022 {cam}")
+                print(f"  • {cam}")
 
             # --- Location ---
-            print("\n\u25A0 Location Settings")
+            print("\n■ Location Settings")
             print("-" * 60)
             city = input("City: ").strip()
             while not city:
-                print("\u274C City cannot be empty!")
+                print("❌ City cannot be empty!")
                 city = input("City: ").strip()
 
             state = input("State (2-letter code, e.g., PA): ").strip().upper()
             while not state or len(state) != 2:
-                print("\u274C Please enter a valid 2-letter state code!")
+                print("❌ Please enter a valid 2-letter state code!")
                 state = input("State (2-letter code, e.g., PA): ").strip().upper()
 
             location = f"{city}, {state}"
-            print(f"\n\u2705 Location set to: {location}")
+            print(f"\n✅ Location set to: {location}")
 
             # --- Geocode and radar ---
             print("\nLooking up coordinates for radar map...")
@@ -167,21 +167,21 @@ async def setup_config():
                 data = await resp.json()
 
             if not data:
-                print("\u26A0\uFE0F Could not determine GPS coordinates, using defaults")
+                print("⚠️ Could not determine GPS coordinates, using defaults")
                 lat, lon = 40.3267, -80.0171
                 radar_station = "KPBZ"
             else:
                 lat = float(data[0]["lat"])
                 lon = float(data[0]["lon"])
-                print(f"\u25B6 Coordinates found: LAT = {lat}, LON = {lon}")
+                print(f"▶ Coordinates found: LAT = {lat}, LON = {lon}")
 
                 # Get radar station from Weather.gov API
                 print("Looking up nearest radar station...")
                 radar_station = await get_radar_station_from_api(lat, lon, session)
-                print(f"\u25B6 Radar station selected: {radar_station}")
+                print(f"▶ Radar station selected: {radar_station}")
 
             # --- Polling Interval ---
-            print("\nPolling Interval")
+            print("\n▶ Polling Interval")
             print("-" * 60)
             print("How often should snapshots be taken?")
             print("  [1] Every 1 minute")
@@ -195,7 +195,7 @@ async def setup_config():
             poll_interval = poll_minutes * 60
 
             # --- Image Storage ---
-            print("\nImage Storage")
+            print("\n▶ Image Storage")
             print("-" * 60)
             print("How many days of images should be saved?")
             print("  1  = 1 day")
@@ -208,7 +208,7 @@ async def setup_config():
             print("Estimated images per camera:", max_images)
 
             # --- Carousel ---
-            print("\nCarousel Display")
+            print("\n▶ Carousel Display")
             print("-" * 60)
             print("How many recent images to show in the web carousel?")
             print("  3 images ")
@@ -220,19 +220,18 @@ async def setup_config():
                 carousel_images = 1
             elif carousel_images > 20:
                 carousel_images = 20
-                print("\u26A0\uFE0F Limited to maximum of 20 images")
+                print("⚠️ Limited to maximum of 20 images")
 
-            # --- NEW: Radar Configuration ---
-            print("\n\u25B6 Weather Radar Configuration")
+            # --- Radar Configuration (automatically enabled) ---
+            print("\n▶ Weather Radar Configuration")
             print("-" * 60)
-            print("This will replace the Windy iframe with PiClock-style animated radar")
-            print("Do you want to enable animated weather radar?")
-            print("  [Y] Yes - Enable radar (requires FREE Mapbox API key)")
-            print("  [N] No - Keep using Windy iframe")
-            radar_choice = input("\nEnable radar? [Y/N]: ").strip().upper()
+            print("Animated weather radar will be enabled ")
+            print("You need a FREE Mapbox API key to use radar")
+            print("Get your free API key at: https://account.mapbox.com/")
+            print("Sign up and create an access token with default scopes")
 
             radar_config = {
-                "enabled": False,
+                "enabled": True,  # Always enabled now
                 "zoom": 7,
                 "frames": 5,
                 "color": 2,
@@ -243,48 +242,42 @@ async def setup_config():
                 "overlay_style": ""
             }
 
-            if radar_choice == "Y":
-                print("\n\u25B6 Radar requires a Mapbox API key (free tier available)")
-                print("Get your free API key at: https://account.mapbox.com/")
-                print("Sign up and create an access token with default scopes")
+            mapbox_token = input("\nEnter Mapbox API token (required): ").strip()
+            while not mapbox_token:
+                print("⚠️ Mapbox API token is required for radar functionality")
+                print("Get a free token at: https://account.mapbox.com/")
+                mapbox_token = input("Enter Mapbox API token: ").strip()
 
-                mapbox_token = input("\nEnter Mapbox API token: ").strip()
-                if mapbox_token:
-                    radar_config["enabled"] = True
-                    radar_config["mapbox_token"] = mapbox_token
+            radar_config["mapbox_token"] = mapbox_token
 
-                    print("\n\u25B6 Radar Zoom Level")
-                    print("  4  = Continental view")
-                    print("  7  = Regional view (default)")
-                    print(" 10  = Local view")
-                    zoom_input = input("\nZoom level [7]: ").strip()
-                    radar_config["zoom"] = int(zoom_input) if zoom_input else 7
+            print("\n▶ Radar Zoom Level")
+            print("  4  = Continental view")
+            print("  7  = Regional view (default)")
+            print(" 10  = Local view")
+            zoom_input = input("\nZoom level [7]: ").strip()
+            radar_config["zoom"] = int(zoom_input) if zoom_input else 7
 
-                    print("\n\u25B6 Animation Frames")
-                    print("Number of time steps to show (more = longer animation)")
-                    print("  3 frames = 30 minutes of history")
-                    print("  5 frames = 50 minutes of history (default)")
-                    print("  8 frames = 80 minutes of history")
-                    frames_input = input("\nFrames [5]: ").strip()
-                    radar_config["frames"] = int(frames_input) if frames_input else 5
+            print("\n▶ Animation Frames")
+            print("Number of time steps to show (more = longer animation)")
+            print("  3 frames = 30 minutes of history")
+            print("  5 frames = 50 minutes of history (default)")
+            print("  8 frames = 80 minutes of history")
+            frames_input = input("\nFrames [5]: ").strip()
+            radar_config["frames"] = int(frames_input) if frames_input else 5
 
-                    print("\n\u25B6 Custom Mapbox Styles (optional)")
-                    print("Leave blank to use default styles")
-                    print("Example: 'username/style-id' or 'mapbox/dark-v11'")
+            print("\n▶ Custom Mapbox Styles (optional)")
+            print("Leave blank to use default styles")
+            print("Example: 'username/style-id' or 'mapbox/dark-v11'")
 
-                    basemap = input("\nBase map style (dark map, no labels) [blank for default]: ").strip()
-                    if basemap:
-                        radar_config["basemap_style"] = basemap
+            basemap = input("\nBase map style (dark map, no labels) [blank for default]: ").strip()
+            if basemap:
+                radar_config["basemap_style"] = basemap
 
-                    overlay = input("Overlay style (transparent, labels only) [blank for default]: ").strip()
-                    if overlay:
-                        radar_config["overlay_style"] = overlay
+            overlay = input("Overlay style (transparent, labels only) [blank for default]: ").strip()
+            if overlay:
+                radar_config["overlay_style"] = overlay
 
-                    print("\n\u2705 Radar configured successfully!")
-                else:
-                    print("\u26A0\uFE0F No API token provided, radar disabled")
-            else:
-                print("\u25B6 Radar disabled")
+            print("\n✅ Radar configured successfully!")
 
             # --- Save Config ---
             config = {
@@ -307,7 +300,7 @@ async def setup_config():
                 json.dump(config, f, indent=4)
 
             print("\n" + "=" * 60)
-            print("\u2705 Configuration saved to blink_config.json")
+            print("✅ Configuration saved to blink_config.json")
             print("=" * 60)
             print("\nConfiguration Summary:")
             print(f"  Cameras: {len(selected_cameras)}")
@@ -315,19 +308,18 @@ async def setup_config():
             print(f"  Image retention: {max_days} days")
             print(f"  Carousel images: {carousel_images}")
             print(f"  Radar enabled: {radar_config['enabled']}")
-            if radar_config['enabled']:
-                print(f"    Zoom: {radar_config['zoom']}")
-                print(f"    Frames: {radar_config['frames']}")
+            print(f"    Zoom: {radar_config['zoom']}")
+            print(f"    Frames: {radar_config['frames']}")
             print("=" * 60)
 
         except Exception as e:
-            print("\u274C Error during Blink setup:", e)
+            print("❌ Error during Blink setup:", e)
             import traceback
             traceback.print_exc()
 
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("\u25B6 Blink Camera Configuration Setup")
+    print("▶ Blink Camera Configuration Setup")
     print("=" * 60)
     asyncio.run(setup_config())
