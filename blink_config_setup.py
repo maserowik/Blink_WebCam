@@ -27,10 +27,43 @@ async def get_radar_station_from_api(lat, lon, session):
         return "KPBZ"
 
 
+def get_input_with_default(prompt, default_value, value_type=str):
+    """Get user input with existing value as default"""
+    if default_value is not None:
+        if value_type == bool:
+            default_str = "Y" if default_value else "N"
+            display_prompt = f"{prompt} [{default_str}]: "
+        else:
+            display_prompt = f"{prompt} [{default_value}]: "
+    else:
+        display_prompt = f"{prompt}: "
+
+    user_input = input(display_prompt).strip()
+
+    if not user_input and default_value is not None:
+        return default_value
+
+    if value_type == int:
+        try:
+            return int(user_input) if user_input else default_value
+        except ValueError:
+            print(f"⚠️ Invalid input, using default: {default_value}")
+            return default_value
+    elif value_type == bool:
+        if user_input.upper() in ['Y', 'YES']:
+            return True
+        elif user_input.upper() in ['N', 'NO']:
+            return False
+        return default_value
+
+    return user_input if user_input else default_value
+
+
 async def setup_config():
     """Query Blink API for cameras and create configuration file"""
 
-    # Check if config exists
+    # Load existing config if available
+    existing_config = {}
     if Path(CONFIG_FILE).exists():
         print("=" * 60)
         print("▶ Existing configuration found")
@@ -39,7 +72,6 @@ async def setup_config():
         choice = input("\nYour choice [V/R]: ").strip().upper()
 
         if choice == "V":
-            # Load and print summary
             try:
                 with open(CONFIG_FILE, "r") as f:
                     config = json.load(f)
@@ -61,7 +93,6 @@ async def setup_config():
                 print("☀ Coordinates:", loc.get("lat", "N/A"), loc.get("lon", "N/A"))
                 print("▶ Radar Station:", loc.get("radar_station", "KPBZ"))
 
-                # Radar configuration
                 radar = config.get("radar", {})
                 print("\n▶ RADAR CONFIGURATION:")
                 print(f"  Enabled: {radar.get('enabled', False)}")
@@ -75,7 +106,13 @@ async def setup_config():
                 print("⚠️ Could not read configuration:", e)
             return
         elif choice == "R":
-            print("\n▶ Re-running setup...\n")
+            print("\n▶ Re-running setup...")
+            print("▶ Press Enter to keep existing values, or type new values\n")
+            try:
+                with open(CONFIG_FILE, "r") as f:
+                    existing_config = json.load(f)
+            except Exception as e:
+                print("⚠️ Could not load existing config:", e)
 
     # Check Blink token
     if not Path(TOKEN_FILE).exists():
@@ -123,11 +160,25 @@ async def setup_config():
             # --- Camera Selection ---
             print("\n▶ Camera Selection")
             print("-" * 60)
-            print("Select cameras to monitor:")
-            print("  [A] All cameras (default)")
-            print("  [C] Choose specific cameras")
-            choice = input("\nYour choice [A/C]: ").strip().upper()
-            selected_cameras = []
+            existing_cameras = existing_config.get("cameras", [])
+
+            if existing_cameras:
+                print("Current cameras monitored:")
+                for cam in existing_cameras:
+                    print(f"  • {cam}")
+                print("\nChange camera selection?")
+                print("  [N] No - keep current cameras (default)")
+                print("  [A] All cameras")
+                print("  [C] Choose specific cameras")
+                choice = input("\nYour choice [N/A/C]: ").strip().upper()
+            else:
+                print("Select cameras to monitor:")
+                print("  [A] All cameras (default)")
+                print("  [C] Choose specific cameras")
+                choice = input("\nYour choice [A/C]: ").strip().upper()
+
+            selected_cameras = existing_cameras
+
             if choice == "C":
                 print("\nEnter camera numbers to monitor (comma-separated), e.g., 1,3,4")
                 selection = input("Camera numbers: ").strip()
@@ -135,9 +186,11 @@ async def setup_config():
                     indices = [int(x.strip()) - 1 for x in selection.split(",")]
                     selected_cameras = [camera_list[i] for i in indices if 0 <= i < len(camera_list)]
                 except:
-                    print("Invalid selection, using all cameras...")
-                    selected_cameras = camera_list
-            else:
+                    print("Invalid selection, using existing cameras...")
+                    selected_cameras = existing_cameras if existing_cameras else camera_list
+            elif choice == "A":
+                selected_cameras = camera_list
+            elif not choice and not existing_cameras:
                 selected_cameras = camera_list
 
             print("\n✅ Selected Cameras:")
@@ -147,42 +200,55 @@ async def setup_config():
             # --- Location ---
             print("\n■ Location Settings")
             print("-" * 60)
-            city = input("City: ").strip()
+            existing_loc = existing_config.get("location", {})
+
+            city = get_input_with_default("City", existing_loc.get("city"))
             while not city:
                 print("❌ City cannot be empty!")
                 city = input("City: ").strip()
 
-            state = input("State (2-letter code, e.g., PA): ").strip().upper()
+            state = get_input_with_default("State (2-letter code, e.g., PA)", existing_loc.get("state"))
             while not state or len(state) != 2:
                 print("❌ Please enter a valid 2-letter state code!")
-                state = input("State (2-letter code, e.g., PA): ").strip().upper()
+                state = input("State (2-letter code): ").strip().upper()
 
             location = f"{city}, {state}"
             print(f"\n✅ Location set to: {location}")
 
             # --- Geocode and radar ---
-            print("\nLooking up coordinates for radar map...")
-            geocode_url = f"https://nominatim.openstreetmap.org/search?city={city}&state={state}&country=USA&format=json"
-            async with session.get(geocode_url, headers={"User-Agent": "BlinkRadar/1.0"}) as resp:
-                data = await resp.json()
+            # Check if location changed
+            location_changed = (city != existing_loc.get("city") or
+                                state != existing_loc.get("state"))
 
-            if not data:
-                print("⚠️ Could not determine GPS coordinates, using defaults")
-                lat, lon = 40.3267, -80.0171
-                radar_station = "KPBZ"
+            if location_changed or not existing_loc.get("lat"):
+                print("\nLooking up coordinates for radar map...")
+                geocode_url = f"https://nominatim.openstreetmap.org/search?city={city}&state={state}&country=USA&format=json"
+                async with session.get(geocode_url, headers={"User-Agent": "BlinkRadar/1.0"}) as resp:
+                    data = await resp.json()
+
+                if not data:
+                    print("⚠️ Could not determine GPS coordinates, using defaults")
+                    lat, lon = 40.3267, -80.0171
+                    radar_station = "KPBZ"
+                else:
+                    lat = float(data[0]["lat"])
+                    lon = float(data[0]["lon"])
+                    print(f"▶ Coordinates found: LAT = {lat}, LON = {lon}")
+
+                    print("Looking up nearest radar station...")
+                    radar_station = await get_radar_station_from_api(lat, lon, session)
+                    print(f"▶ Radar station selected: {radar_station}")
             else:
-                lat = float(data[0]["lat"])
-                lon = float(data[0]["lon"])
-                print(f"▶ Coordinates found: LAT = {lat}, LON = {lon}")
-
-                # Get radar station from Weather.gov API
-                print("Looking up nearest radar station...")
-                radar_station = await get_radar_station_from_api(lat, lon, session)
-                print(f"▶ Radar station selected: {radar_station}")
+                lat = existing_loc.get("lat", 40.3267)
+                lon = existing_loc.get("lon", -80.0171)
+                radar_station = existing_loc.get("radar_station", "KPBZ")
+                print(f"▶ Using existing coordinates: LAT = {lat}, LON = {lon}")
+                print(f"▶ Using existing radar station: {radar_station}")
 
             # --- Polling Interval ---
             print("\n▶ Polling Interval")
             print("-" * 60)
+            existing_poll = existing_config.get("poll_interval", 300) // 60
             print("How often should snapshots be taken?")
             print("  [1] Every 1 minute")
             print("  [5] Every 5 minutes (default)")
@@ -190,59 +256,60 @@ async def setup_config():
             print("  [15] Every 15 minutes")
             print("  [30] Every 30 minutes")
             print("  [60] Every 60 minutes")
-            poll_input = input("\nMinutes [5]: ").strip()
-            poll_minutes = int(poll_input) if poll_input else 5
+            poll_minutes = get_input_with_default("\nMinutes", existing_poll, int)
             poll_interval = poll_minutes * 60
 
             # --- Image Storage ---
             print("\n▶ Image Storage")
             print("-" * 60)
+            existing_days = existing_config.get("max_days", 7)
             print("How many days of images should be saved?")
             print("  1  = 1 day")
             print("  7  = 7 days (default)")
             print(" 14  = 14 days")
             print(" 30  = 30 days")
-            days_input = input("\nDays [7]: ").strip()
-            max_days = int(days_input) if days_input else 7
+            max_days = get_input_with_default("\nDays", existing_days, int)
             max_images = int((max_days * 24 * 60) / poll_minutes)
             print("Estimated images per camera:", max_images)
 
             # --- Carousel ---
             print("\n▶ Carousel Display")
             print("-" * 60)
+            existing_carousel = existing_config.get("carousel_images", 5)
             print("How many recent images to show in the web carousel?")
             print("  3 images ")
             print("  5 images (default)")
             print(" 10 images ")
-            carousel_input = input("\nCarousel images [5]: ").strip()
-            carousel_images = int(carousel_input) if carousel_input else 5
+            carousel_images = get_input_with_default("\nCarousel images", existing_carousel, int)
             if carousel_images < 1:
                 carousel_images = 1
             elif carousel_images > 20:
                 carousel_images = 20
                 print("⚠️ Limited to maximum of 20 images")
 
-            # --- Radar Configuration (automatically enabled) ---
+            # --- Radar Configuration ---
             print("\n▶ Weather Radar Configuration")
             print("-" * 60)
-            print("Animated weather radar will be enabled ")
-            print("You need a FREE Mapbox API key to use radar")
+            existing_radar = existing_config.get("radar", {})
+
+            print("Animated weather radar (PiClock-style) - requires FREE Mapbox API key")
             print("Get your free API key at: https://account.mapbox.com/")
-            print("Sign up and create an access token with default scopes")
 
             radar_config = {
-                "enabled": True,  # Always enabled now
-                "zoom": 7,
-                "frames": 5,
-                "color": 2,
-                "smooth": 1,
-                "snow": 1,
-                "mapbox_token": "",
-                "basemap_style": "",
-                "overlay_style": ""
+                "enabled": True,
+                "zoom": existing_radar.get("zoom", 7),
+                "frames": existing_radar.get("frames", 5),
+                "color": existing_radar.get("color", 2),
+                "smooth": existing_radar.get("smooth", 1),
+                "snow": existing_radar.get("snow", 1),
+                "mapbox_token": existing_radar.get("mapbox_token", ""),
+                "basemap_style": existing_radar.get("basemap_style", ""),
+                "overlay_style": existing_radar.get("overlay_style", "")
             }
 
-            mapbox_token = input("\nEnter Mapbox API token (required): ").strip()
+            mapbox_token = get_input_with_default("\nEnter Mapbox API token",
+                                                  radar_config["mapbox_token"] if radar_config[
+                                                      "mapbox_token"] else None)
             while not mapbox_token:
                 print("⚠️ Mapbox API token is required for radar functionality")
                 print("Get a free token at: https://account.mapbox.com/")
@@ -254,28 +321,41 @@ async def setup_config():
             print("  4  = Continental view")
             print("  7  = Regional view (default)")
             print(" 10  = Local view")
-            zoom_input = input("\nZoom level [7]: ").strip()
-            radar_config["zoom"] = int(zoom_input) if zoom_input else 7
+            radar_config["zoom"] = get_input_with_default("\nZoom level", radar_config["zoom"], int)
 
             print("\n▶ Animation Frames")
             print("Number of time steps to show (more = longer animation)")
             print("  3 frames = 30 minutes of history")
             print("  5 frames = 50 minutes of history (default)")
             print("  8 frames = 80 minutes of history")
-            frames_input = input("\nFrames [5]: ").strip()
-            radar_config["frames"] = int(frames_input) if frames_input else 5
+            radar_config["frames"] = get_input_with_default("\nFrames", radar_config["frames"], int)
 
-            print("\n▶ Custom Mapbox Styles (optional)")
-            print("Leave blank to use default styles")
-            print("Example: 'username/style-id' or 'mapbox/dark-v11'")
+            # --- Custom Mapbox Styles (Advanced/Optional) ---
+            print("\n▶ Custom Mapbox Styles (Advanced - Optional)")
+            print("-" * 60)
+            print("Most users can skip this - default styles work great!")
+            print("\nOnly customize if you want a different map appearance.")
+            print("Examples: 'mapbox/dark-v11', 'mapbox/streets-v12', or your custom style")
 
-            basemap = input("\nBase map style (dark map, no labels) [blank for default]: ").strip()
-            if basemap:
-                radar_config["basemap_style"] = basemap
+            use_custom = input("\nUse custom Mapbox styles? [y/N]: ").strip().upper()
 
-            overlay = input("Overlay style (transparent, labels only) [blank for default]: ").strip()
-            if overlay:
-                radar_config["overlay_style"] = overlay
+            if use_custom == 'Y':
+                print("\nEnter style IDs (leave blank to use defaults):")
+                basemap = get_input_with_default("  Base map style ID",
+                                                 radar_config["basemap_style"] if radar_config[
+                                                     "basemap_style"] else None)
+                if basemap:
+                    radar_config["basemap_style"] = basemap
+
+                overlay = get_input_with_default("  Overlay style ID",
+                                                 radar_config["overlay_style"] if radar_config[
+                                                     "overlay_style"] else None)
+                if overlay:
+                    radar_config["overlay_style"] = overlay
+
+                print("✅ Custom styles configured")
+            else:
+                print("✅ Using default Mapbox styles (recommended)")
 
             print("\n✅ Radar configured successfully!")
 
