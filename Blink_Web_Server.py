@@ -388,9 +388,7 @@ def api_radar_config():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# ---------- Weather Endpoint ----------
-
-# Add this to your Blink_Web_Server.py, replacing the existing /api/weather endpoint
+# ---------- Weather Endpoint (Tomorrow.io) ----------
 
 @app.route('/api/weather')
 def api_weather():
@@ -404,6 +402,7 @@ def api_weather():
         api_key = weather_config.get("api_key")
 
         if not api_key:
+            print("ERROR: Tomorrow.io API key not configured")
             return jsonify({"error": "Tomorrow.io API key not configured"}), 500
 
         location = get_location()
@@ -418,6 +417,7 @@ def api_weather():
             "units": "imperial"  # Fahrenheit
         }
 
+        print(f"Fetching weather from Tomorrow.io for {lat},{lon}")
         response = requests.get(url, params=params, timeout=10)
 
         if response.status_code == 200:
@@ -448,9 +448,11 @@ def api_weather():
                 }]
             }
 
+            print(f"Weather fetched successfully: {weather_desc}, {values.get('temperature')}°F")
             return jsonify(formatted_response)
         else:
             print(f"Tomorrow.io API error: {response.status_code}")
+            print(f"Response: {response.text}")
             return jsonify({"error": "Weather service unavailable"}), 503
 
     except Exception as e:
@@ -500,6 +502,8 @@ def get_wind_direction(degrees):
                   "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
     index = int((degrees + 11.25) / 22.5) % 16
     return directions[index]
+
+
 # ---------- Image Serving Endpoint ----------
 
 @app.route('/image/<camera_name>/<path:image_path>')
