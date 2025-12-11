@@ -35,7 +35,7 @@ class RadarWidget {
             this.timestampElement.id = 'radar-timestamp';
             this.timestampElement.style.cssText = `
                 position: absolute;
-                bottom: 5px;
+                top: 5px;
                 left: 5px;
                 background: rgba(0, 0, 0, 0.6);
                 color: white;
