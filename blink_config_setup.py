@@ -93,6 +93,13 @@ async def setup_config():
                 print("☀ Coordinates:", loc.get("lat", "N/A"), loc.get("lon", "N/A"))
                 print("▶ Radar Station:", loc.get("radar_station", "KPBZ"))
 
+                # Weather configuration
+                weather = config.get("weather", {})
+                print("\n▶ WEATHER CONFIGURATION:")
+                print(f"  Enabled: {weather.get('enabled', False)}")
+                if weather.get('api_key'):
+                    print(f"  Tomorrow.io API key: {weather['api_key'][:20]}...")
+
                 radar = config.get("radar", {})
                 print("\n▶ RADAR CONFIGURATION:")
                 print(f"  Enabled: {radar.get('enabled', False)}")
@@ -287,6 +294,30 @@ async def setup_config():
                 carousel_images = 20
                 print("⚠️ Limited to maximum of 20 images")
 
+            # --- Tomorrow.io Weather API Configuration ---
+            print("\n▶ Tomorrow.io Weather API Configuration")
+            print("-" * 60)
+            existing_weather = existing_config.get("weather", {})
+
+            print("Tomorrow.io provides accurate weather data for your location")
+            print("Get your free API key at: https://www.tomorrow.io/weather-api/")
+            print("Free tier: 500 calls/day (plenty for weather updates)")
+
+            weather_config = {
+                "enabled": True,
+                "api_key": existing_weather.get("api_key", "")
+            }
+
+            weather_api_key = get_input_with_default("\nEnter Tomorrow.io API key",
+                                                     weather_config["api_key"] if weather_config["api_key"] else None)
+            while not weather_api_key:
+                print("⚠️ Tomorrow.io API key is required for weather functionality")
+                print("Get a free key at: https://www.tomorrow.io/weather-api/")
+                weather_api_key = input("Enter Tomorrow.io API key: ").strip()
+
+            weather_config["api_key"] = weather_api_key
+            print("✅ Weather API configured successfully!")
+
             # --- Radar Configuration ---
             print("\n▶ Weather Radar Configuration")
             print("-" * 60)
@@ -373,6 +404,7 @@ async def setup_config():
                     "lon": lon,
                     "radar_station": radar_station
                 },
+                "weather": weather_config,
                 "radar": radar_config
             }
 
@@ -387,9 +419,11 @@ async def setup_config():
             print(f"  Poll interval: {poll_minutes} minutes")
             print(f"  Image retention: {max_days} days")
             print(f"  Carousel images: {carousel_images}")
+            print(f"  Weather API: Tomorrow.io")
             print(f"  Radar enabled: {radar_config['enabled']}")
-            print(f"    Zoom: {radar_config['zoom']}")
-            print(f"    Frames: {radar_config['frames']}")
+            if radar_config['enabled']:
+                print(f"    Zoom: {radar_config['zoom']}")
+                print(f"    Frames: {radar_config['frames']}")
             print("=" * 60)
 
         except Exception as e:

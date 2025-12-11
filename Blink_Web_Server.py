@@ -390,28 +390,116 @@ def api_radar_config():
 
 # ---------- Weather Endpoint ----------
 
+# Add this to your Blink_Web_Server.py, replacing the existing /api/weather endpoint
+
 @app.route('/api/weather')
 def api_weather():
-    """Fetch weather data from wttr.in API"""
+    """Fetch weather data from Tomorrow.io API"""
     try:
-        location = get_location()
-        city = location.get('city', 'Bethel Park')
-        state = location.get('state', 'PA')
+        # Load config to get API key
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
 
-        # Use wttr.in API for weather data
-        url = f"https://wttr.in/{city},{state}?format=j1"
-        response = requests.get(url, timeout=10)
+        weather_config = config.get("weather", {})
+        api_key = weather_config.get("api_key")
+
+        if not api_key:
+            return jsonify({"error": "Tomorrow.io API key not configured"}), 500
+
+        location = get_location()
+        lat = location.get('lat', 40.3267)
+        lon = location.get('lon', -80.0171)
+
+        # Tomorrow.io API endpoint
+        url = "https://api.tomorrow.io/v4/weather/realtime"
+        params = {
+            "location": f"{lat},{lon}",
+            "apikey": api_key,
+            "units": "imperial"  # Fahrenheit
+        }
+
+        response = requests.get(url, params=params, timeout=10)
 
         if response.status_code == 200:
-            return jsonify(response.json())
+            data = response.json()
+
+            # Map Tomorrow.io data to wttr.in format (so frontend doesn't change)
+            weather_data = data.get("data", {})
+            values = weather_data.get("values", {})
+
+            # Map weather codes to descriptions
+            weather_code = values.get("weatherCode", 0)
+            weather_desc = map_weather_code(weather_code)
+
+            # Format response to match wttr.in structure
+            formatted_response = {
+                "current_condition": [{
+                    "temp_F": str(int(values.get("temperature", 0))),
+                    "FeelsLikeF": str(int(values.get("temperatureApparent", 0))),
+                    "humidity": str(int(values.get("humidity", 0))),
+                    "weatherDesc": [{"value": weather_desc}],
+                    "windspeedMiles": str(int(values.get("windSpeed", 0))),
+                    "winddir16Point": get_wind_direction(values.get("windDirection", 0)),
+                    "precipMM": str(values.get("precipitationIntensity", 0)),
+                    "visibility": str(int(values.get("visibility", 0))),
+                    "pressure": str(int(values.get("pressureSeaLevel", 0))),
+                    "cloudcover": str(int(values.get("cloudCover", 0))),
+                    "uvIndex": str(int(values.get("uvIndex", 0)))
+                }]
+            }
+
+            return jsonify(formatted_response)
         else:
+            print(f"Tomorrow.io API error: {response.status_code}")
             return jsonify({"error": "Weather service unavailable"}), 503
 
     except Exception as e:
         print(f"Error fetching weather: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 
+def map_weather_code(code):
+    """Map Tomorrow.io weather codes to descriptive text"""
+    weather_codes = {
+        0: "Unknown",
+        1000: "Clear",
+        1001: "Cloudy",
+        1100: "Mostly Clear",
+        1101: "Partly Cloudy",
+        1102: "Mostly Cloudy",
+        2000: "Fog",
+        2100: "Light Fog",
+        3000: "Light Wind",
+        3001: "Wind",
+        3002: "Strong Wind",
+        4000: "Drizzle",
+        4001: "Rain",
+        4200: "Light Rain",
+        4201: "Heavy Rain",
+        5000: "Snow",
+        5001: "Flurries",
+        5100: "Light Snow",
+        5101: "Heavy Snow",
+        6000: "Freezing Drizzle",
+        6001: "Freezing Rain",
+        6200: "Light Freezing Rain",
+        6201: "Heavy Freezing Rain",
+        7000: "Ice Pellets",
+        7101: "Heavy Ice Pellets",
+        7102: "Light Ice Pellets",
+        8000: "Thunderstorm"
+    }
+    return weather_codes.get(code, "Unknown")
+
+
+def get_wind_direction(degrees):
+    """Convert wind direction degrees to compass direction"""
+    directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                  "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    index = int((degrees + 11.25) / 22.5) % 16
+    return directions[index]
 # ---------- Image Serving Endpoint ----------
 
 @app.route('/image/<camera_name>/<path:image_path>')
