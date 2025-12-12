@@ -392,7 +392,7 @@ def api_radar_config():
 
 @app.route('/api/weather')
 def api_weather():
-    """Fetch weather data from Tomorrow.io API"""
+    """Fetch weather data from Tomorrow.io API (matching pi-clock implementation)"""
     try:
         # Load config to get API key
         with open(CONFIG_FILE, "r") as f:
@@ -409,23 +409,28 @@ def api_weather():
         lat = location.get('lat', 40.3267)
         lon = location.get('lon', -80.0171)
 
-        # Tomorrow.io API endpoint
-        url = "https://api.tomorrow.io/v4/weather/realtime"
+        # Use Tomorrow.io Timelines API (same as pi-clock)
+        url = "https://api.tomorrow.io/v4/timelines"
         params = {
             "location": f"{lat},{lon}",
             "apikey": api_key,
-            "units": "imperial"  # Fahrenheit
+            "units": "imperial",
+            "timesteps": "current",
+            "fields": "temperature,weatherCode,temperatureApparent,humidity,windSpeed,windDirection,windGust,pressureSeaLevel,precipitationType"
         }
 
-        print(f"Fetching weather from Tomorrow.io for {lat},{lon}")
+        print(f"Fetching weather from Tomorrow.io Timelines API for {lat},{lon}")
         response = requests.get(url, params=params, timeout=10)
 
         if response.status_code == 200:
             data = response.json()
 
-            # Map Tomorrow.io data to wttr.in format (so frontend doesn't change)
-            weather_data = data.get("data", {})
-            values = weather_data.get("values", {})
+            # Extract data from Timelines API format
+            timelines = data.get("data", {}).get("timelines", [])
+            if not timelines or not timelines[0].get("intervals"):
+                return jsonify({"error": "Invalid weather data format"}), 500
+
+            values = timelines[0]["intervals"][0]["values"]
 
             # Map weather codes to descriptions
             weather_code = values.get("weatherCode", 0)
@@ -441,14 +446,12 @@ def api_weather():
                     "windspeedMiles": str(int(values.get("windSpeed", 0))),
                     "winddir16Point": get_wind_direction(values.get("windDirection", 0)),
                     "precipMM": str(values.get("precipitationIntensity", 0)),
-                    "visibility": str(int(values.get("visibility", 0))),
-                    "pressure": str(int(values.get("pressureSeaLevel", 0))),
-                    "cloudcover": str(int(values.get("cloudCover", 0))),
-                    "uvIndex": str(int(values.get("uvIndex", 0)))
+                    "pressure": str(int(values.get("pressureSeaLevel", 0)))
                 }]
             }
 
-            print(f"Weather fetched successfully: {weather_desc}, {values.get('temperature')}°F")
+            print(
+                f"Weather fetched successfully: {weather_desc}, {values.get('temperature')}°F (feels like {values.get('temperatureApparent')}°F)")
             return jsonify(formatted_response)
         else:
             print(f"Tomorrow.io API error: {response.status_code}")
