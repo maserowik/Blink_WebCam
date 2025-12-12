@@ -1,6 +1,9 @@
+# Virtual environments
+.blink/
+.venv/
+
 # Folders
 cameras/
-.venv/
 **/logs/
 tmp/
 .vs/
@@ -16,4 +19,3 @@ Thumbs.db
 # Project files
 *.log
 *.json
-
