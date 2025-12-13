@@ -68,8 +68,8 @@ def get_location():
             "city": "Bethel Park",
             "state": "PA",
             "display": "Bethel Park, PA",
-            "lat": 40.3267,
-            "lon": -80.0171
+            "lat": 40.3044,
+            "lon": -80.0717
         }
     except Exception as e:
         print(f"Error reading location: {e}")
@@ -77,8 +77,8 @@ def get_location():
             "city": "Bethel Park",
             "state": "PA",
             "display": "Bethel Park, PA",
-            "lat": 40.3267,
-            "lon": -80.0171
+            "lat": 40.3044,
+            "lon": -80.0717
         }
 
 
@@ -365,8 +365,8 @@ def api_radar_config():
 
         radar_data = {
             "enabled": radar_settings.get("enabled", False),
-            "lat": location.get("lat", 40.3267),
-            "lon": location.get("lon", -80.0171),
+            "lat": location.get("lat", 40.3044),
+            "lon": location.get("lon", -80.0717),
             "radar_station": location.get("radar_station", "KPBZ"),
             "city": location.get("city", "Bethel Park"),
             "state": location.get("state", "PA"),
@@ -406,8 +406,8 @@ def api_weather():
             return jsonify({"error": "Tomorrow.io API key not configured"}), 500
 
         location = get_location()
-        lat = location.get('lat', 40.3267)
-        lon = location.get('lon', -80.0171)
+        lat = location.get('lat', 40.3044)
+        lon = location.get('lon', -80.0717)
 
         # Use Tomorrow.io Timelines API (same as pi-clock)
         url = "https://api.tomorrow.io/v4/timelines"
@@ -432,6 +432,17 @@ def api_weather():
 
             values = timelines[0]["intervals"][0]["values"]
 
+            # DEBUG: Print actual API values
+            print("=" * 60)
+            print("DEBUG API VALUES FROM TOMORROW.IO:")
+            print(f"  temperature: {values.get('temperature')}")
+            print(f"  temperatureApparent: {values.get('temperatureApparent')}")
+            print(f"  humidity: {values.get('humidity')}")
+            print(f"  windSpeed: {values.get('windSpeed')}")
+            print(f"  windDirection: {values.get('windDirection')}")
+            print(f"  pressureSeaLevel: {values.get('pressureSeaLevel')}")
+            print("=" * 60)
+
             # Map weather codes to descriptions
             weather_code = values.get("weatherCode", 0)
             weather_desc = map_weather_code(weather_code)
@@ -450,8 +461,7 @@ def api_weather():
                 }]
             }
 
-            print(
-                f"Weather fetched successfully: {weather_desc}, {values.get('temperature')}°F (feels like {values.get('temperatureApparent')}°F)")
+            print(f"Weather fetched successfully: {weather_desc}, {values.get('temperature')}°F (feels like {values.get('temperatureApparent')}°F)")
             return jsonify(formatted_response)
         else:
             print(f"Tomorrow.io API error: {response.status_code}")
