@@ -164,7 +164,7 @@ function checkForStaleImages() {
                 const badge = document.createElement('div');
                 badge.className = 'stale-badge';
                 badge.innerHTML = `
-                    ⚠️ STALE
+                    &#x26A0;&#xFE0F; STALE
                     <div style="font-size: 0.8em; margin-top: 2px;">
                         Last photo: ${formatTimeAgo(ageMinutes)}
                     </div>
@@ -176,7 +176,7 @@ function checkForStaleImages() {
             const existingBadge = card.querySelector('.stale-badge');
             if (existingBadge) {
                 existingBadge.innerHTML = `
-                    ⚠️ STALE
+                    &#x26A0;&#xFE0F; STALE
                     <div style="font-size: 0.8em; margin-top: 2px;">
                         Last photo: ${formatTimeAgo(ageMinutes)}
                     </div>

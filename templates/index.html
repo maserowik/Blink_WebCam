@@ -134,7 +134,17 @@
             {# NEW: Offline Badge #}
             {% if camera.alerts.is_offline %}
             <div class="camera-offline-badge">
-                <div style="font-size: 1.2em;">🔴 OFFLINE</div>
+                <div style="font-size: 1.2em;">&#x1F534; OFFLINE</div>
+                <div style="font-size: 0.85em; margin-top: 2px;">
+                    {{ camera.alerts.offline_reason }}
+                </div>
+            </div>
+            {% endif %}
+
+            {# NEW: Offline Badge #}
+            {% if camera.alerts.is_offline %}
+            <div class="camera-offline-badge">
+                <div style="font-size: 1.2em;">&#x1F534; OFFLINE</div>
                 <div style="font-size: 0.85em; margin-top: 2px;">
                     {{ camera.alerts.offline_reason }}
                 </div>
@@ -144,10 +154,10 @@
             {# NEW: Duplicate Image Badge #}
             {% if camera.alerts.has_duplicates and not camera.alerts.is_offline %}
             <div class="camera-duplicate-badge">
-                ⚠️ DUPLICATE IMAGES
+               &#x26A0;&#xFE0F; DUPLICATE IMAGES
             </div>
             {% endif %}
-
+           
             <button class="snooze-icon-btn {% if camera.snooze_status.is_snoozed %}active{% endif %}"
                     id="snooze-btn-{{ camera.normalized_name }}"
                     onclick="openSnoozeModal('{{ camera.normalized_name }}', '{{ camera.name }}')"
