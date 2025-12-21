@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Blink Camera Monitor</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<!-- Snooze Modal -->
+<div class="snooze-modal" id="snooze-modal">
+    <div class="snooze-modal-content">
+        <div class="snooze-modal-header">
+            <div class="snooze-modal-title">Snooze Alerts</div>
+            <button class="snooze-modal-close" onclick="closeSnoozeModal()">&times;</button>
+        </div>
+        <div class="snooze-camera-name" id="snooze-camera-display"></div>
+        <div class="snooze-status-display" id="snooze-status-display" style="display:none;">
+            Currently snoozed until <span id="snooze-expiry-time"></span>
+        </div>
+        <div class="snooze-options" id="snooze-options">
+            <div class="snooze-option" data-minutes="30">30 min</div>
+            <div class="snooze-option" data-minutes="60">1 hour</div>
+            <div class="snooze-option" data-minutes="120">2 hours</div>
+            <div class="snooze-option" data-minutes="180">3 hours</div>
+            <div class="snooze-option" data-minutes="240">4 hours</div>
+        </div>
+        <div class="snooze-custom">
+            <label class="snooze-custom-label">Or enter custom duration (minutes):</label>
+            <input type="number" class="snooze-custom-input" id="snooze-custom-input" placeholder="e.g., 90" min="1">
+        </div>
+        <div class="snooze-actions">
+            <button class="snooze-btn snooze-btn-secondary" onclick="closeSnoozeModal()">Cancel</button>
+            <button class="snooze-btn snooze-btn-cancel" id="snooze-cancel-btn" onclick="cancelSnooze()" style="display:none;">Remove Snooze</button>
+            <button class="snooze-btn snooze-btn-primary" id="snooze-apply-btn" onclick="applySnooze()">Apply Snooze</button>
+        </div>
+    </div>
+</div>
+
+<!-- Global Snooze All Modal -->
+<div class="snooze-modal" id="snooze-all-modal">
+    <div class="snooze-modal-content">
+        <div class="snooze-modal-header">
+            <div class="snooze-modal-title">Snooze All Cameras</div>
+            <button class="snooze-modal-close" onclick="closeSnoozeAllModal()">&times;</button>
+        </div>
+        <div class="snooze-options" id="snooze-all-options">
+            <div class="snooze-option" data-minutes="30">30 min</div>
+            <div class="snooze-option" data-minutes="60">1 hour</div>
+            <div class="snooze-option" data-minutes="120">2 hours</div>
+            <div class="snooze-option" data-minutes="180">3 hours</div>
+            <div class="snooze-option" data-minutes="240">4 hours</div>
+        </div>
+        <div class="snooze-custom">
+            <label class="snooze-custom-label">Or enter custom duration (minutes):</label>
+            <input type="number" class="snooze-custom-input" id="snooze-all-custom-input" placeholder="e.g., 90" min="1">
+        </div>
+        <div class="snooze-actions">
+            <button class="snooze-btn snooze-btn-secondary" onclick="closeSnoozeAllModal()">Cancel</button>
+            <button class="snooze-btn snooze-btn-primary" onclick="applySnoozeAll()">Snooze All</button>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Banner -->
+<div class="alert-banner" id="alert-banner"></div>
+
+<div class="container">
+<header>
+    <div class="header-left">
+        <h1>Blink Camera Monitor</h1>
+        <p class="subtitle">Real-time camera surveillance dashboard</p>
+        <p class="timestamp">
+            <span class="status-indicator"></span>
+            <span id="current-time"></span>
+        </p>
+    </div>
+    <div class="header-right">
+        <div class="radar-widget" id="radar-widget">
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--card-text);padding:20px;text-align:center;">
+                Loading radar...
+            </div>
+        </div>
+        <div class="weather-widget" id="weather-widget">
+            <div class="weather-loading">Loading weather...</div>
+        </div>
+        <div class="arm-toggle" id="arm-toggle" onclick="toggleArm()">
+            <div class="arm-toggle-slider">
+                <span id="arm-icon">&#x1F513;</span>
+            </div>
+            <span class="arm-toggle-label armed-label">Armed</span>
+            <span class="arm-toggle-label disarmed-label">Disarm</span>
+        </div>
+        <div class="snooze-all-toggle {% if all_snoozed %}snoozed{% endif %}" id="snooze-all-toggle" onclick="toggleSnoozeAll()">
+            <div class="snooze-all-toggle-slider">
+                <span id="snooze-all-icon">&#x1F515;</span>
+            </div>
+            <span class="snooze-all-toggle-label snoozed-label">Snooze</span>
+            <span class="snooze-all-toggle-label active-label">Active</span>
+        </div>
+        <div class="theme-toggle" onclick="toggleTheme()">
+            <div class="theme-toggle-slider">
+                <span id="theme-icon">&#x2600;&#xFE0F;</span>
+            </div>
+        </div>
+    </div>
+</header>
+
+{% if cameras %}
+<div class="camera-grid">
+    {% for camera in cameras %}
+    <div class="camera-card
+        {% if camera.images|length == 0 %}offline{% endif %}
+        {% if camera.snooze_status.is_snoozed %}snoozed{% endif %}
+        {% if camera.alerts.is_offline %}camera-offline{% endif %}
+        {% if camera.alerts.is_offline %}has-offline-badge{% endif %}"
+        data-camera="{{ camera.normalized_name }}">
+
+        <div class="camera-header">
+            {{ camera.name }}
+            <div class="camera-timestamp" id="timestamp-{{ camera.normalized_name }}"></div>
+        </div>
+
+        <div class="camera-image-container">
+            {# Snooze Badge #}
+            {% if camera.snooze_status.is_snoozed %}
+            <div class="snooze-badge" id="snooze-badge-{{ camera.normalized_name }}" data-expiry="{{ camera.snooze_status.snooze_until }}">
+                <div>&#x1F515; Until {{ camera.snooze_status.snooze_until_full }}</div>
+                <div id="snooze-countdown-{{ camera.normalized_name }}" style="font-size: 0.95em; font-weight: bold;">{{ camera.snooze_status.minutes_remaining }}m left</div>
+            </div>
+            {% endif %}
+
+            {# NEW: Offline Badge #}
+            {% if camera.alerts.is_offline %}
+            <div class="camera-offline-badge">
+                <div style="font-size: 1.2em;">🔴 OFFLINE</div>
+                <div style="font-size: 0.85em; margin-top: 2px;">
+                    {{ camera.alerts.offline_reason }}
+                </div>
+            </div>
+            {% endif %}
+
+            {# NEW: Duplicate Image Badge #}
+            {% if camera.alerts.has_duplicates and not camera.alerts.is_offline %}
+            <div class="camera-duplicate-badge">
+                ⚠️ DUPLICATE IMAGES
+            </div>
+            {% endif %}
+
+            <button class="snooze-icon-btn {% if camera.snooze_status.is_snoozed %}active{% endif %}"
+                    id="snooze-btn-{{ camera.normalized_name }}"
+                    onclick="openSnoozeModal('{{ camera.normalized_name }}', '{{ camera.name }}')"
+                    title="{% if camera.snooze_status.is_snoozed %}Manage snooze{% else %}Snooze alerts{% endif %}">
+                &#x1F515;
+            </button>
+
+            {% if camera.images %}
+                {% for image in camera.images %}
+                <img src="/image/{{ camera.normalized_name }}/{{ image }}"
+                     alt="{{ camera.name }}"
+                     class="camera-image {% if loop.first %}active{% endif %}"
+                     data-camera="{{ camera.normalized_name }}"
+                     data-index="{{ loop.index0 }}"
+                     data-filename="{{ image }}">
+                {% endfor %}
+                {% if camera.images|length > 1 %}
+                <div class="image-nav">
+                    {% for image in camera.images %}
+                    <div class="nav-dot {% if loop.first %}active{% endif %}"
+                         data-camera="{{ camera.normalized_name }}"
+                         data-index="{{ loop.index0 }}"></div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            {% else %}
+            <div style="display:flex;align-items:center;justify-content:center;height:100%;color:white;font-size:clamp(0.9em, 2vw, 1.1em);flex-direction:column;gap:10px;">
+                <div style="font-size:3em;">&#x1F535;</div>
+                <div>Camera Offline</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="camera-stats">
+            <div class="stat" data-temperature="{{ camera.temperature }}" data-camera="{{ camera.normalized_name }}">
+                <div class="stat-label">Temperature</div>
+                <div class="stat-value" id="temp-{{ camera.normalized_name }}">{{ camera.temperature }}</div>
+            </div>
+            <div class="stat" data-battery="{{ camera.battery }}" data-camera="{{ camera.normalized_name }}">
+                <div class="stat-label">Battery</div>
+                <div class="stat-value" id="battery-{{ camera.normalized_name }}">{{ camera.battery }}</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">WiFi</div>
+                <div class="stat-value">
+                    <div class="wifi-bars">
+                        {% for i in range(1,6) %}
+                        <div class="wifi-bar {% if i <= camera.wifi %}active{% endif %}"></div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="no-cameras">
+    <h2>No cameras configured</h2>
+    <p>Run `python blink_config_setup.py` to configure your cameras</p>
+</div>
+{% endif %}
+
+<footer>
+     Live updates every {{ config.get('poll_interval', 300) // 60 }} min | Carousel cycles every 3 sec
+</footer>
+</div>
+
+<!-- Load Configuration (must be first) -->
+<script>
+// Configuration from Flask template
+window.BlinkConfig = {
+    TEMP_HOT_THRESHOLD: 113,
+    TEMP_COLD_THRESHOLD: -4,
+    BATTERY_LOW_THRESHOLD: 20,
+    POLL_INTERVAL_MINUTES: {{ config.get('poll_interval', 300) // 60 }},
+    WEATHER_LOCATION: "{{ location.display if location else 'Bethel Park, PA' }}",
+    WEATHER_CITY: "{{ location.city if location else 'Bethel Park' }}",
+    WEATHER_STATE: "{{ location.state if location else 'PA' }}",
+    WEATHER_LAT: "{{ location.lat | default(40.3267) }}",
+    WEATHER_LON: "{{ location.lon | default(-80.0171) }}"
+};
+</script>
+
+<!-- Load JavaScript modules -->
+<script src="{{ url_for('static', filename='js/snooze.js') }}"></script>
+<script src="{{ url_for('static', filename='js/radar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/camera.js') }}"></script>
+<script src="{{ url_for('static', filename='js/weather.js') }}"></script>
+<script src="{{ url_for('static', filename='js/camera-refresh.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+</body>
+</html>

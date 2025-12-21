@@ -1,0 +1,21 @@
+# Virtual environments
+.blink/
+.venv/
+
+# Folders
+cameras/
+**/logs/
+tmp/
+.vs/
+.idea/
+Backups/
+
+# OS / Editor files
+.DS_Store
+Thumbs.db
+*.pyc
+*.swp
+
+# Project files
+*.log
+*.json

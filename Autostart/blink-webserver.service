@@ -1,0 +1,18 @@
+[Unit]
+Description=Blink Flask Web Server
+After=network-online.target blink-webcam.service
+Wants=network-online.target
+Requires=blink-webcam.service
+
+[Service]
+Type=simple
+User=beta-blink
+WorkingDirectory=/home/beta-blink/Blink_WebCam
+Environment=HOME=/home/beta-blink
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/home/beta-blink/Blink_WebCam/.blink/bin/python /home/beta-blink/Blink_WebCam/Blink_Web_Server.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
