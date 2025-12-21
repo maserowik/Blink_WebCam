@@ -148,9 +148,7 @@ def log_token(msg: str):
     line = f"{timestamp} | {msg}\n"
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(line)
-    # Also log to main log
-    log_main(msg)
-
+    print(line.strip())  # Console output only
 
 def log_performance(msg: str):
     """Log performance metrics to system/performance/performance_YYYY-MM-DD.log file"""
