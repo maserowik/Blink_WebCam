@@ -57,23 +57,22 @@ def get_current_log_file(folder: Path, name: str) -> Path:
 def log_web(msg: str):
     """Log general web server events to system/webserver/webserver_YYYY-MM-DD.log"""
     log_rotator.check_and_rotate_if_needed()
-
+    
     log_file = get_current_log_file(WEBSERVER_LOG_FOLDER, "webserver")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp} | {msg}\n"
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(line)
-    print(line.strip())
 
 
 def log_web_error(msg: str, exception: Exception = None):
     """Log errors with tracebacks to web server log"""
     log_rotator.check_and_rotate_if_needed()
-
+    
     log_file = get_current_log_file(WEBSERVER_LOG_FOLDER, "webserver")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp} | ERROR | {msg}\n"
-
+    
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(line)
         if exception:
@@ -81,16 +80,11 @@ def log_web_error(msg: str, exception: Exception = None):
             f.write(traceback.format_exc())
             f.write("\n")
 
-    print(line.strip())
-    if exception:
-        import traceback
-        traceback.print_exc()
-
 
 def log_web_performance(msg: str):
     """Log API timing metrics to system/performance/webserver-perf_YYYY-MM-DD.log"""
     log_rotator.check_and_rotate_if_needed()
-
+    
     log_file = get_current_log_file(PERF_LOG_FOLDER, "webserver-perf")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"{timestamp} | {msg}\n"
@@ -201,7 +195,6 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
     log_files = []
 
     if not log_folder.exists():
-        log_web(f"Log folder does not exist: {log_folder}")
         return {'temp': 'N/A', 'battery': 'N/A', 'wifi': 0, 'timestamp': 'N/A'}
 
     for item in log_folder.iterdir():
@@ -219,7 +212,6 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
                 log_files.append(("9999-99-99", item))
 
     if not log_files:
-        log_web(f"No log files found for {camera_name} in {log_folder}")
         return {'temp': 'N/A', 'battery': 'N/A', 'wifi': 0, 'timestamp': 'N/A'}
 
     log_files.sort(key=lambda x: x[0], reverse=True)
@@ -302,7 +294,7 @@ def get_camera_data():
                 "last_update_formatted": last_update_formatted,
                 "alerts": alerts
             })
-
+        
         duration = time.time() - start_time
         log_web_performance(f"get_camera_data | {duration:.2f}s | {len(camera_data)} cameras")
         return camera_data
@@ -354,7 +346,7 @@ async def get_blink_status():
             await blink.setup_post_verify()
             await blink.refresh()
             armed = any(sync_module.arm for sync_name, sync_module in blink.sync.items())
-
+            
             duration = time.time() - start_time
             log_web_performance(f"get_blink_status | {duration:.2f}s | armed={armed}")
             return {"armed": armed, "success": True}
@@ -387,7 +379,7 @@ async def set_blink_arm_state(arm: bool):
             for sync_name, sync_module in blink.sync.items():
                 await sync_module.async_arm(arm)
                 log_web(f"{'Armed' if arm else 'Disarmed'} {sync_name}")
-
+            
             duration = time.time() - start_time
             log_web_performance(f"set_blink_arm_state | {duration:.2f}s | armed={arm}")
             return {"success": True, "armed": arm}
@@ -419,7 +411,7 @@ def index():
 
         duration = time.time() - start_time
         log_web_performance(f"GET / | {duration:.2f}s | {len(cameras)} cameras")
-
+        
         return render_template('index.html',
                                cameras=cameras,
                                location=location,
@@ -470,7 +462,7 @@ def api_camera_last_update(camera_name):
         cam_folder = CAMERAS_DIR / normalized_name
         last_photo_time = get_most_recent_photo_time(cam_folder)
         duration = time.time() - start_time
-
+        
         if last_photo_time:
             log_web_performance(f"GET /api/camera/{camera_name}/last_update | {duration:.2f}s | SUCCESS")
             return jsonify({
@@ -565,7 +557,7 @@ def api_radar_config():
 def api_weather():
     """Fetch weather data from Tomorrow.io API with server-side caching"""
     start_time = time.time()
-
+    
     with weather_cache['lock']:
         if weather_cache['data'] and weather_cache['timestamp']:
             cache_age = (datetime.now() - weather_cache['timestamp']).total_seconds()
@@ -857,8 +849,7 @@ def api_snooze_all_set():
 
         duration = time.time() - start_time
         log_web(f"Snoozed all {len(camera_names)} cameras for {duration_minutes} minutes")
-        log_web_performance(
-            f"POST /api/snooze/all/set | {duration:.2f}s | {len(camera_names)} cameras {duration_minutes}m")
+        log_web_performance(f"POST /api/snooze/all/set | {duration:.2f}s | {len(camera_names)} cameras {duration_minutes}m")
         return jsonify({
             "success": True,
             "count": len(camera_names)
@@ -955,10 +946,10 @@ if __name__ == '__main__':
     LOG_FOLDER.mkdir(parents=True, exist_ok=True)
     WEBSERVER_LOG_FOLDER.mkdir(parents=True, exist_ok=True)
     PERF_LOG_FOLDER.mkdir(parents=True, exist_ok=True)
-
+    
     # Start log rotation monitoring
     log_rotator.start_midnight_rotation_thread()
-
+    
     log_web("=" * 60)
     log_web("BLINK WEB SERVER STARTING")
     log_web("=" * 60)
@@ -968,7 +959,7 @@ if __name__ == '__main__':
     log_web(f"Weather cache: {WEATHER_CACHE_DURATION // 60} minutes")
     log_web(f"Log rotation: Enabled (keeps 5 days of history)")
     log_web("=" * 60)
-
+    
     local_ip = get_local_ip()
     try:
         from waitress import serve
