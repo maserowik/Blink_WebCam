@@ -11,8 +11,10 @@ from blinkpy.helpers.util import BlinkURLHandler
 import requests
 import logging
 import threading
+import time
 
 from alert_snooze import AlertSnooze, SNOOZE_DURATIONS
+from log_rotation import LogRotator
 
 app = Flask(__name__)
 
@@ -25,6 +27,13 @@ LOG_FOLDER = ROOT_DIR / "logs"
 snooze_manager = AlertSnooze()
 logging.getLogger('blinkpy.sync_module').setLevel(logging.CRITICAL)
 
+# Initialize log rotator
+log_rotator = LogRotator(LOG_FOLDER, max_backups=5)
+
+# Define log file paths
+WEBSERVER_LOG_FOLDER = log_rotator.get_system_log_folder("webserver")
+PERF_LOG_FOLDER = log_rotator.get_system_log_folder("performance")
+
 # Weather caching
 weather_cache = {
     'data': None,
@@ -35,6 +44,64 @@ weather_cache = {
 WEATHER_CACHE_DURATION = 30 * 60  # 30 minutes in seconds
 
 
+# ============================================================================
+# LOGGING FUNCTIONS
+# ============================================================================
+
+def get_current_log_file(folder: Path, name: str) -> Path:
+    """Get current log file with today's date"""
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    return folder / f"{name}_{date_str}.log"
+
+
+def log_web(msg: str):
+    """Log general web server events to system/webserver/webserver_YYYY-MM-DD.log"""
+    log_rotator.check_and_rotate_if_needed()
+
+    log_file = get_current_log_file(WEBSERVER_LOG_FOLDER, "webserver")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"{timestamp} | {msg}\n"
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(line)
+    print(line.strip())
+
+
+def log_web_error(msg: str, exception: Exception = None):
+    """Log errors with tracebacks to web server log"""
+    log_rotator.check_and_rotate_if_needed()
+
+    log_file = get_current_log_file(WEBSERVER_LOG_FOLDER, "webserver")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"{timestamp} | ERROR | {msg}\n"
+
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(line)
+        if exception:
+            import traceback
+            f.write(traceback.format_exc())
+            f.write("\n")
+
+    print(line.strip())
+    if exception:
+        import traceback
+        traceback.print_exc()
+
+
+def log_web_performance(msg: str):
+    """Log API timing metrics to system/performance/webserver-perf_YYYY-MM-DD.log"""
+    log_rotator.check_and_rotate_if_needed()
+
+    log_file = get_current_log_file(PERF_LOG_FOLDER, "webserver-perf")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"{timestamp} | {msg}\n"
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(line)
+
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
 def get_local_ip():
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -42,7 +109,8 @@ def get_local_ip():
         local_ip = s.getsockname()[0]
         s.close()
         return local_ip
-    except Exception:
+    except Exception as e:
+        log_web_error(f"Could not determine local IP: {e}", e)
         return "127.0.0.1"
 
 
@@ -82,7 +150,7 @@ def get_location():
             "lon": -80.0717
         }
     except Exception as e:
-        print(f"Error reading location: {e}")
+        log_web_error(f"Error reading location from config: {e}", e)
         return {
             "city": "Bethel Park",
             "state": "PA",
@@ -133,7 +201,7 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
     log_files = []
 
     if not log_folder.exists():
-        print(f"Log folder does not exist: {log_folder}")
+        log_web(f"Log folder does not exist: {log_folder}")
         return {'temp': 'N/A', 'battery': 'N/A', 'wifi': 0, 'timestamp': 'N/A'}
 
     for item in log_folder.iterdir():
@@ -151,7 +219,7 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
                 log_files.append(("9999-99-99", item))
 
     if not log_files:
-        print(f"No log files found for {camera_name} in {log_folder}")
+        log_web(f"No log files found for {camera_name} in {log_folder}")
         return {'temp': 'N/A', 'battery': 'N/A', 'wifi': 0, 'timestamp': 'N/A'}
 
     log_files.sort(key=lambda x: x[0], reverse=True)
@@ -189,13 +257,12 @@ def get_latest_log_entry(log_folder: Path, camera_name: str) -> dict:
                             wifi = 0
             return {'temp': temp, 'battery': battery, 'wifi': wifi, 'timestamp': timestamp}
     except Exception as e:
-        print(f"Error parsing log for {camera_name}: {e}")
-        import traceback
-        traceback.print_exc()
+        log_web_error(f"Error parsing log for {camera_name}: {e}", e)
         return {'temp': 'N/A', 'battery': 'N/A', 'wifi': 0, 'timestamp': 'N/A'}
 
 
 def get_camera_data():
+    start_time = time.time()
     try:
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
@@ -220,7 +287,6 @@ def get_camera_data():
                 last_update = last_photo_time.isoformat()
                 last_update_formatted = last_photo_time.strftime("%m/%d/%Y %I:%M:%S %p")
 
-            # Check for camera issues
             alerts = check_camera_alerts(log_folder, normalized_name, log_data['wifi'])
 
             camera_data.append({
@@ -236,32 +302,26 @@ def get_camera_data():
                 "last_update_formatted": last_update_formatted,
                 "alerts": alerts
             })
+
+        duration = time.time() - start_time
+        log_web_performance(f"get_camera_data | {duration:.2f}s | {len(camera_data)} cameras")
         return camera_data
     except Exception as e:
-        print(f"Error reading camera data: {e}")
-        import traceback
-        traceback.print_exc()
+        duration = time.time() - start_time
+        log_web_error(f"Error reading camera data (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"get_camera_data | {duration:.2f}s | ERROR")
         return []
 
 
 def check_camera_alerts(log_folder: Path, camera_name: str, wifi_bars: int) -> dict:
-    """
-    Check camera log for alerts (offline status only)
-
-    Note: Duplicate detection disabled - static scenes produce identical images,
-    which is normal camera behavior, not a problem.
-
-    Returns:
-        dict with alert flags and messages
-    """
+    """Check camera log for alerts (offline status only)"""
     alerts = {
         "is_offline": False,
-        "has_duplicates": False,  # Always False - duplicates are normal for static scenes
+        "has_duplicates": False,
         "offline_reason": None,
         "duplicate_count": 0
     }
 
-    # Check if WiFi is 0 bars (camera offline)
     if wifi_bars == 0:
         alerts["is_offline"] = True
         alerts["offline_reason"] = "No WiFi signal"
@@ -269,9 +329,12 @@ def check_camera_alerts(log_folder: Path, camera_name: str, wifi_bars: int) -> d
     return alerts
 
 
-# ---------- Blink API functions ----------
+# ============================================================================
+# BLINK API FUNCTIONS
+# ============================================================================
 
 async def get_blink_status():
+    start_time = time.time()
     try:
         with open(TOKEN_FILE, "r") as f:
             token_data = json.load(f)
@@ -291,13 +354,19 @@ async def get_blink_status():
             await blink.setup_post_verify()
             await blink.refresh()
             armed = any(sync_module.arm for sync_name, sync_module in blink.sync.items())
+
+            duration = time.time() - start_time
+            log_web_performance(f"get_blink_status | {duration:.2f}s | armed={armed}")
             return {"armed": armed, "success": True}
     except Exception as e:
-        print(f"Error getting Blink status: {e}")
+        duration = time.time() - start_time
+        log_web_error(f"Error getting Blink status (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"get_blink_status | {duration:.2f}s | ERROR")
         return {"armed": False, "success": False, "error": str(e)}
 
 
 async def set_blink_arm_state(arm: bool):
+    start_time = time.time()
     try:
         with open(TOKEN_FILE, "r") as f:
             token_data = json.load(f)
@@ -317,66 +386,108 @@ async def set_blink_arm_state(arm: bool):
             await blink.setup_post_verify()
             for sync_name, sync_module in blink.sync.items():
                 await sync_module.async_arm(arm)
-                print(f"{'Armed' if arm else 'Disarmed'} {sync_name}")
+                log_web(f"{'Armed' if arm else 'Disarmed'} {sync_name}")
+
+            duration = time.time() - start_time
+            log_web_performance(f"set_blink_arm_state | {duration:.2f}s | armed={arm}")
             return {"success": True, "armed": arm}
     except Exception as e:
-        print(f"Error setting arm state: {e}")
+        duration = time.time() - start_time
+        log_web_error(f"Error setting arm state (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"set_blink_arm_state | {duration:.2f}s | ERROR")
         return {"success": False, "error": str(e)}
 
 
-# ---------- API Routes ----------
+# ============================================================================
+# API ROUTES
+# ============================================================================
 
 @app.route('/')
 def index():
-    cameras = get_camera_data()
-    location = get_location()
-    camera_names = [cam['normalized_name'] for cam in cameras]
-    all_snoozed = snooze_manager.are_all_cameras_snoozed(camera_names)
-
-    # Load config for poll interval
+    start_time = time.time()
     try:
-        with open(CONFIG_FILE, "r") as f:
-            config = json.load(f)
-    except:
-        config = {"poll_interval": 300}
+        cameras = get_camera_data()
+        location = get_location()
+        camera_names = [cam['normalized_name'] for cam in cameras]
+        all_snoozed = snooze_manager.are_all_cameras_snoozed(camera_names)
 
-    return render_template('index.html',
-                           cameras=cameras,
-                           location=location,
-                           all_snoozed=all_snoozed,
-                           config=config)
+        try:
+            with open(CONFIG_FILE, "r") as f:
+                config = json.load(f)
+        except:
+            config = {"poll_interval": 300}
+
+        duration = time.time() - start_time
+        log_web_performance(f"GET / | {duration:.2f}s | {len(cameras)} cameras")
+
+        return render_template('index.html',
+                               cameras=cameras,
+                               location=location,
+                               all_snoozed=all_snoozed,
+                               config=config)
+    except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error rendering index (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET / | {duration:.2f}s | ERROR")
+        return "Internal Server Error", 500
 
 
 @app.route('/api/cameras')
 def api_cameras():
-    cameras = get_camera_data()
-    return jsonify(cameras)
+    start_time = time.time()
+    try:
+        cameras = get_camera_data()
+        duration = time.time() - start_time
+        log_web_performance(f"GET /api/cameras | {duration:.2f}s | {len(cameras)} cameras")
+        return jsonify(cameras)
+    except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/cameras (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET /api/cameras | {duration:.2f}s | ERROR")
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/cameras/refresh')
 def refresh_cameras():
+    start_time = time.time()
     try:
         cameras_data = get_camera_data()
+        duration = time.time() - start_time
+        log_web_performance(f"GET /api/cameras/refresh | {duration:.2f}s | {len(cameras_data)} cameras")
         return jsonify({'success': True, 'cameras': cameras_data})
     except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/cameras/refresh (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET /api/cameras/refresh | {duration:.2f}s | ERROR")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/camera/<camera_name>/last_update')
 def api_camera_last_update(camera_name):
-    normalized_name = normalize_camera_name(camera_name)
-    cam_folder = CAMERAS_DIR / normalized_name
-    last_photo_time = get_most_recent_photo_time(cam_folder)
-    if last_photo_time:
-        return jsonify({
-            "success": True,
-            "camera": camera_name,
-            "last_update": last_photo_time.isoformat(),
-            "last_update_formatted": last_photo_time.strftime("%m/%d/%Y %I:%M:%S %p"),
-            "last_update_relative": get_relative_time(last_photo_time)
-        })
-    else:
-        return jsonify({"success": False, "camera": camera_name, "error": "No photos found"}), 404
+    start_time = time.time()
+    try:
+        normalized_name = normalize_camera_name(camera_name)
+        cam_folder = CAMERAS_DIR / normalized_name
+        last_photo_time = get_most_recent_photo_time(cam_folder)
+        duration = time.time() - start_time
+
+        if last_photo_time:
+            log_web_performance(f"GET /api/camera/{camera_name}/last_update | {duration:.2f}s | SUCCESS")
+            return jsonify({
+                "success": True,
+                "camera": camera_name,
+                "last_update": last_photo_time.isoformat(),
+                "last_update_formatted": last_photo_time.strftime("%m/%d/%Y %I:%M:%S %p"),
+                "last_update_relative": get_relative_time(last_photo_time)
+            })
+        else:
+            log_web_performance(f"GET /api/camera/{camera_name}/last_update | {duration:.2f}s | NOT_FOUND")
+            return jsonify({"success": False, "camera": camera_name, "error": "No photos found"}), 404
+    except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/camera/{camera_name}/last_update (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET /api/camera/{camera_name}/last_update | {duration:.2f}s | ERROR")
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 def get_relative_time(dt: datetime) -> str:
@@ -398,15 +509,23 @@ def get_relative_time(dt: datetime) -> str:
 
 @app.route('/api/location')
 def api_location():
-    location = get_location()
-    return jsonify(location)
+    start_time = time.time()
+    try:
+        location = get_location()
+        duration = time.time() - start_time
+        log_web_performance(f"GET /api/location | {duration:.2f}s | SUCCESS")
+        return jsonify(location)
+    except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/location (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET /api/location | {duration:.2f}s | ERROR")
+        return jsonify({'error': str(e)}), 500
 
-
-# ---------- Radar Config Endpoint ----------
 
 @app.route('/api/radar/config')
 def api_radar_config():
     """Return complete radar configuration including Mapbox settings."""
+    start_time = time.time()
     try:
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
@@ -432,29 +551,31 @@ def api_radar_config():
             "overlay_style": radar_settings.get("overlay_style", "")
         }
 
+        duration = time.time() - start_time
+        log_web_performance(f"GET /api/radar/config | {duration:.2f}s | SUCCESS")
         return jsonify({"success": True, "radar_config": radar_data})
     except Exception as e:
-        import traceback
-        traceback.print_exc()
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/radar/config (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET /api/radar/config | {duration:.2f}s | ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
-
-# ---------- Weather Endpoint (Tomorrow.io) with Server-Side Caching ----------
 
 @app.route('/api/weather')
 def api_weather():
     """Fetch weather data from Tomorrow.io API with server-side caching"""
+    start_time = time.time()
 
-    # Check cache first
     with weather_cache['lock']:
         if weather_cache['data'] and weather_cache['timestamp']:
             cache_age = (datetime.now() - weather_cache['timestamp']).total_seconds()
             if cache_age < WEATHER_CACHE_DURATION:
-                print(f"Serving cached weather data (age: {int(cache_age)}s)")
+                duration = time.time() - start_time
+                log_web(f"Serving cached weather data (age: {int(cache_age)}s)")
+                log_web_performance(f"GET /api/weather | {duration:.2f}s | CACHED")
                 return jsonify(weather_cache['data'])
 
     try:
-        # Load config to get API key
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
 
@@ -462,14 +583,13 @@ def api_weather():
         api_key = weather_config.get("api_key")
 
         if not api_key:
-            print("ERROR: Tomorrow.io API key not configured")
+            log_web("ERROR: Tomorrow.io API key not configured")
             return jsonify({"error": "Tomorrow.io API key not configured"}), 500
 
         location = get_location()
         lat = location.get('lat', 40.3044)
         lon = location.get('lon', -80.0717)
 
-        # Use Tomorrow.io Timelines API (same as pi-clock)
         url = "https://api.tomorrow.io/v4/timelines"
         params = {
             "location": f"{lat},{lon}",
@@ -479,24 +599,21 @@ def api_weather():
             "fields": "temperature,weatherCode,temperatureApparent,humidity,windSpeed,windDirection,windGust,pressureSeaLevel,precipitationType"
         }
 
-        print(f"Fetching weather from Tomorrow.io Timelines API for {lat},{lon}")
+        log_web(f"Fetching weather from Tomorrow.io Timelines API for {lat},{lon}")
         response = requests.get(url, params=params, timeout=10)
 
         if response.status_code == 200:
             data = response.json()
 
-            # Extract data from Timelines API format
             timelines = data.get("data", {}).get("timelines", [])
             if not timelines or not timelines[0].get("intervals"):
                 return jsonify({"error": "Invalid weather data format"}), 500
 
             values = timelines[0]["intervals"][0]["values"]
 
-            # Map weather codes to descriptions
             weather_code = values.get("weatherCode", 0)
             weather_desc = map_weather_code(weather_code)
 
-            # Format response to match wttr.in structure
             formatted_response = {
                 "current_condition": [{
                     "temp_F": str(int(values.get("temperature", 0))),
@@ -510,42 +627,46 @@ def api_weather():
                 }]
             }
 
-            # Cache the response
             with weather_cache['lock']:
                 weather_cache['data'] = formatted_response
                 weather_cache['timestamp'] = datetime.now()
 
-            print(
-                f"Weather fetched successfully: {weather_desc}, {values.get('temperature')}°F (feels like {values.get('temperatureApparent')}°F)")
+            duration = time.time() - start_time
+            log_web(f"Weather fetched successfully: {weather_desc}, {values.get('temperature')}°F")
+            log_web_performance(f"GET /api/weather | {duration:.2f}s | SUCCESS")
             return jsonify(formatted_response)
 
         elif response.status_code == 429:
-            print(f"Tomorrow.io API rate limit hit!")
-            print(f"Response: {response.text}")
+            log_web(f"Tomorrow.io API rate limit hit!")
+            log_web(f"Response: {response.text}")
 
-            # Return cached data if available (even if stale)
             with weather_cache['lock']:
                 if weather_cache['data']:
                     cache_age = (datetime.now() - weather_cache['timestamp']).total_seconds()
-                    print(f"Returning stale cached data (age: {int(cache_age)}s) due to rate limit")
+                    log_web(f"Returning stale cached data (age: {int(cache_age)}s) due to rate limit")
+                    duration = time.time() - start_time
+                    log_web_performance(f"GET /api/weather | {duration:.2f}s | RATE_LIMIT_CACHED")
                     return jsonify(weather_cache['data'])
 
+            duration = time.time() - start_time
+            log_web_performance(f"GET /api/weather | {duration:.2f}s | RATE_LIMIT")
             return jsonify({"error": "Weather service rate limit exceeded"}), 429
         else:
-            print(f"Tomorrow.io API error: {response.status_code}")
-            print(f"Response: {response.text}")
+            log_web(f"Tomorrow.io API error: {response.status_code}")
+            log_web(f"Response: {response.text}")
+            duration = time.time() - start_time
+            log_web_performance(f"GET /api/weather | {duration:.2f}s | HTTP_{response.status_code}")
             return jsonify({"error": "Weather service unavailable"}), 503
 
     except Exception as e:
-        print(f"Error fetching weather: {e}")
-        import traceback
-        traceback.print_exc()
+        duration = time.time() - start_time
+        log_web_error(f"Error fetching weather (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET /api/weather | {duration:.2f}s | ERROR")
 
-        # Return cached data on error (even if stale)
         with weather_cache['lock']:
             if weather_cache['data']:
                 cache_age = (datetime.now() - weather_cache['timestamp']).total_seconds()
-                print(f"Returning cached data (age: {int(cache_age)}s) due to error")
+                log_web(f"Returning cached data (age: {int(cache_age)}s) due to error")
                 return jsonify(weather_cache['data'])
 
         return jsonify({"error": str(e)}), 500
@@ -593,74 +714,106 @@ def get_wind_direction(degrees):
     return directions[index]
 
 
-# ---------- Image Serving Endpoint ----------
-
 @app.route('/image/<camera_name>/<path:image_path>')
 def serve_camera_image(camera_name, image_path):
     """Serve camera images from date-organized folders"""
+    start_time = time.time()
     try:
         cam_folder = CAMERAS_DIR / camera_name
         image_file = cam_folder / image_path
 
         if image_file.exists() and image_file.is_file():
+            duration = time.time() - start_time
+            log_web_performance(f"GET /image/{camera_name}/{image_path} | {duration:.2f}s | SUCCESS")
             return send_file(image_file, mimetype='image/jpeg')
         else:
+            duration = time.time() - start_time
+            log_web_performance(f"GET /image/{camera_name}/{image_path} | {duration:.2f}s | NOT_FOUND")
             return "Image not found", 404
     except Exception as e:
-        print(f"Error serving image: {e}")
+        duration = time.time() - start_time
+        log_web_error(f"Error serving image {camera_name}/{image_path} (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET /image/{camera_name}/{image_path} | {duration:.2f}s | ERROR")
         return "Error serving image", 500
 
 
-# ---------- Snooze Endpoints ----------
+# ============================================================================
+# SNOOZE ENDPOINTS
+# ============================================================================
 
 @app.route('/api/snooze/status/<camera_name>')
 def api_snooze_status(camera_name):
     """Get snooze status for a specific camera"""
+    start_time = time.time()
     try:
         status = snooze_manager.get_snooze_status(camera_name)
+        duration = time.time() - start_time
+        log_web_performance(f"GET /api/snooze/status/{camera_name} | {duration:.2f}s | SUCCESS")
         return jsonify(status)
     except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/snooze/status/{camera_name} (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET /api/snooze/status/{camera_name} | {duration:.2f}s | ERROR")
         return jsonify({"error": str(e)}), 500
 
 
 @app.route('/api/snooze/set', methods=['POST'])
 def api_snooze_set():
     """Set snooze for a camera"""
+    start_time = time.time()
     try:
         data = request.json
         camera_name = data.get('camera_name')
         duration_minutes = data.get('duration_minutes')
 
         if not camera_name or not duration_minutes:
+            duration = time.time() - start_time
+            log_web_performance(f"POST /api/snooze/set | {duration:.2f}s | BAD_REQUEST")
             return jsonify({"success": False, "error": "Missing parameters"}), 400
 
         snooze_manager.snooze_camera(camera_name, duration_minutes)
+        duration = time.time() - start_time
+        log_web(f"Snoozed {camera_name} for {duration_minutes} minutes")
+        log_web_performance(f"POST /api/snooze/set | {duration:.2f}s | {camera_name} {duration_minutes}m")
         return jsonify({"success": True})
 
     except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/snooze/set (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"POST /api/snooze/set | {duration:.2f}s | ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/snooze/unset', methods=['POST'])
 def api_snooze_unset():
     """Remove snooze from a camera"""
+    start_time = time.time()
     try:
         data = request.json
         camera_name = data.get('camera_name')
 
         if not camera_name:
+            duration = time.time() - start_time
+            log_web_performance(f"POST /api/snooze/unset | {duration:.2f}s | BAD_REQUEST")
             return jsonify({"success": False, "error": "Missing camera_name"}), 400
 
         snooze_manager.unsnooze_camera(camera_name)
+        duration = time.time() - start_time
+        log_web(f"Removed snooze for {camera_name}")
+        log_web_performance(f"POST /api/snooze/unset | {duration:.2f}s | {camera_name}")
         return jsonify({"success": True})
 
     except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/snooze/unset (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"POST /api/snooze/unset | {duration:.2f}s | ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/snooze/all/status')
 def api_snooze_all_status():
     """Check if all cameras are snoozed"""
+    start_time = time.time()
     try:
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
@@ -669,22 +822,30 @@ def api_snooze_all_status():
 
         all_snoozed = snooze_manager.are_all_cameras_snoozed(camera_names)
 
+        duration = time.time() - start_time
+        log_web_performance(f"GET /api/snooze/all/status | {duration:.2f}s | all_snoozed={all_snoozed}")
         return jsonify({
             "success": True,
             "all_snoozed": all_snoozed
         })
     except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/snooze/all/status (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET /api/snooze/all/status | {duration:.2f}s | ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/snooze/all/set', methods=['POST'])
 def api_snooze_all_set():
     """Snooze all cameras"""
+    start_time = time.time()
     try:
         data = request.json
         duration_minutes = data.get('duration_minutes')
 
         if not duration_minutes:
+            duration = time.time() - start_time
+            log_web_performance(f"POST /api/snooze/all/set | {duration:.2f}s | BAD_REQUEST")
             return jsonify({"success": False, "error": "Missing duration_minutes"}), 400
 
         with open(CONFIG_FILE, "r") as f:
@@ -694,87 +855,134 @@ def api_snooze_all_set():
 
         snooze_manager.snooze_all_cameras(camera_names, duration_minutes)
 
+        duration = time.time() - start_time
+        log_web(f"Snoozed all {len(camera_names)} cameras for {duration_minutes} minutes")
+        log_web_performance(
+            f"POST /api/snooze/all/set | {duration:.2f}s | {len(camera_names)} cameras {duration_minutes}m")
         return jsonify({
             "success": True,
             "count": len(camera_names)
         })
 
     except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/snooze/all/set (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"POST /api/snooze/all/set | {duration:.2f}s | ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/snooze/all/unset', methods=['POST'])
 def api_snooze_all_unset():
     """Unsnooze all cameras"""
+    start_time = time.time()
     try:
         snooze_manager.unsnooze_all_cameras()
+        duration = time.time() - start_time
+        log_web("Unsnoozed all cameras")
+        log_web_performance(f"POST /api/snooze/all/unset | {duration:.2f}s | SUCCESS")
         return jsonify({"success": True})
 
     except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/snooze/all/unset (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"POST /api/snooze/all/unset | {duration:.2f}s | ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/snooze/cleanup', methods=['POST'])
 def api_snooze_cleanup():
     """Cleanup expired snoozes"""
+    start_time = time.time()
     try:
         snooze_manager.cleanup_expired_snoozes()
+        duration = time.time() - start_time
+        log_web_performance(f"POST /api/snooze/cleanup | {duration:.2f}s | SUCCESS")
         return jsonify({"success": True})
 
     except Exception as e:
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/snooze/cleanup (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"POST /api/snooze/cleanup | {duration:.2f}s | ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# ---------- Arm/Disarm Endpoints ----------
+# ============================================================================
+# ARM/DISARM ENDPOINTS
+# ============================================================================
 
 @app.route('/api/arm/status')
 def api_arm_status():
     """Get current arm/disarm status"""
+    start_time = time.time()
     try:
         result = asyncio.run(get_blink_status())
+        duration = time.time() - start_time
+        log_web_performance(f"GET /api/arm/status | {duration:.2f}s | armed={result.get('armed', False)}")
         return jsonify(result)
     except Exception as e:
-        print(f"Error in arm status endpoint: {e}")
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/arm/status (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"GET /api/arm/status | {duration:.2f}s | ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route('/api/arm/set', methods=['POST'])
 def api_arm_set():
     """Set arm/disarm state"""
+    start_time = time.time()
     try:
         data = request.json
         arm = data.get('arm', False)
 
         result = asyncio.run(set_blink_arm_state(arm))
+        duration = time.time() - start_time
+        log_web_performance(f"POST /api/arm/set | {duration:.2f}s | arm={arm}")
         return jsonify(result)
 
     except Exception as e:
-        print(f"Error in arm set endpoint: {e}")
+        duration = time.time() - start_time
+        log_web_error(f"Error in /api/arm/set (took {duration:.2f}s): {e}", e)
+        log_web_performance(f"POST /api/arm/set | {duration:.2f}s | ERROR")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# ---------- Main ----------
+# ============================================================================
+# MAIN
+# ============================================================================
 
 if __name__ == '__main__':
-    print("=" * 60)
-    print("Blink Camera Web Server")
-    print("=" * 60)
+    # Ensure log folders exist
+    LOG_FOLDER.mkdir(parents=True, exist_ok=True)
+    WEBSERVER_LOG_FOLDER.mkdir(parents=True, exist_ok=True)
+    PERF_LOG_FOLDER.mkdir(parents=True, exist_ok=True)
+
+    # Start log rotation monitoring
+    log_rotator.start_midnight_rotation_thread()
+
+    log_web("=" * 60)
+    log_web("BLINK WEB SERVER STARTING")
+    log_web("=" * 60)
+    log_web(f"Log folder: {LOG_FOLDER}")
+    log_web(f"Web server log: {get_current_log_file(WEBSERVER_LOG_FOLDER, 'webserver')}")
+    log_web(f"Performance log: {get_current_log_file(PERF_LOG_FOLDER, 'webserver-perf')}")
+    log_web(f"Weather cache: {WEATHER_CACHE_DURATION // 60} minutes")
+    log_web(f"Log rotation: Enabled (keeps 5 days of history)")
+    log_web("=" * 60)
+
     local_ip = get_local_ip()
     try:
         from waitress import serve
 
         logging.getLogger("waitress.queue").setLevel(logging.ERROR)
-        print("Using Waitress production server")
-        print(f"Local access:   http://localhost:5000")
-        print(f"Network access: http://{local_ip}:5000")
-        print("=" * 60)
-        print("Weather caching: 30 minutes")
-        print("=" * 60)
-        print("Press Ctrl+C to stop the server")
-        print("=" * 60)
+        log_web("Using Waitress production server")
+        log_web(f"Local access:   http://localhost:5000")
+        log_web(f"Network access: http://{local_ip}:5000")
+        log_web("=" * 60)
+        log_web("Press Ctrl+C to stop the server")
+        log_web("=" * 60)
         serve(app, host='0.0.0.0', port=5000, threads=6, channel_timeout=120, backlog=128)
     except ImportError:
-        print("Waitress not found - using Flask development server")
-        print("For production use, install Waitress: pip install waitress")
-        print("=" * 60)
+        log_web("Waitress not found - using Flask development server")
+        log_web("For production use, install Waitress: pip install waitress")
+        log_web("=" * 60)
         app.run(host='0.0.0.0', port=5000, debug=False)
