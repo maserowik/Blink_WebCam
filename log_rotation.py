@@ -87,12 +87,6 @@ class LogRotator:
         extension = log_file.suffix  # e.g., ".log"
         parent_folder = log_file.parent
 
-        # Get display path (relative to logs folder for cleaner output)
-        try:
-            display_path = parent_folder.relative_to(self.log_folder)
-        except ValueError:
-            display_path = parent_folder
-
         # Rotate existing backups (oldest first)
         for i in range(self.max_backups, 0, -1):
             old_backup = parent_folder / f"{base_name}.{i}{extension}"
@@ -101,29 +95,21 @@ class LogRotator:
                 # Delete oldest backup
                 if old_backup.exists():
                     old_backup.unlink()
-                    print(f"\U0001F5D1\uFE0F Deleted: {display_path}/{old_backup.name}")
             else:
                 # Shift backup to next number
                 if old_backup.exists():
                     new_backup = parent_folder / f"{base_name}.{i + 1}{extension}"
                     shutil.move(str(old_backup), str(new_backup))
-                    print(f"\U0001F4E6 Rotated: {display_path}/{old_backup.name} -> {new_backup.name}")
 
         # Move current log to .1
         first_backup = parent_folder / f"{base_name}.1{extension}"
         shutil.copy2(str(log_file), str(first_backup))
-        print(f"\U0001F4BE Backed up: {display_path}/{log_file.name} -> {first_backup.name}")
 
         # Clear current log file
         log_file.write_text("")
-        print(f"\U0001F4C4 Cleared: {display_path}/{log_file.name}")
 
     def rotate_all_logs(self):
-        """Rotate all .log files in all subdirectories"""
-        print("\n" + "=" * 60)
-        print(f"\U0001F504 LOG ROTATION STARTED - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=" * 60)
-
+        """Rotate all .log files in all subdirectories (silent operation)"""
         # Find all .log files recursively
         log_files = []
 
@@ -136,43 +122,28 @@ class LogRotator:
                         log_files.append(log_file)
 
         if not log_files:
-            print("\u2139\uFE0F No log files found to rotate")
-            print("=" * 60 + "\n")
             return
 
-        print(f"\U0001F50D Found {len(log_files)} log file(s) to rotate:")
-
-        # Group by type for display
-        system_logs = [f for f in log_files if self.system_folder in f.parents]
-        camera_logs = [f for f in log_files if self.cameras_folder in f.parents]
-
-        if system_logs:
-            print(f"\n  \U0001F4C1 System Logs ({len(system_logs)}):")
-            for log_file in sorted(system_logs):
-                rel_path = log_file.relative_to(self.log_folder)
-                print(f"     \u2022 {rel_path}")
-
-        if camera_logs:
-            print(f"\n  \U0001F4F9 Camera Logs ({len(camera_logs)}):")
-            for log_file in sorted(camera_logs):
-                rel_path = log_file.relative_to(self.log_folder)
-                print(f"     \u2022 {rel_path}")
-
-        print()
-
-        # Rotate each log file
+        # Rotate each log file silently
         for log_file in log_files:
             try:
                 self.rotate_log(log_file)
             except Exception as e:
-                rel_path = log_file.relative_to(self.log_folder)
-                print(f"\u274C Error rotating {rel_path}: {e}")
+                # Log error to main log file if it exists
+                main_log = self.get_system_log_folder("main") / "main.log"
+                if main_log.exists():
+                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    with open(main_log, "a", encoding="utf-8") as f:
+                        f.write(f"{timestamp} | ERROR | Log rotation failed for {log_file.name}: {e}\n")
 
         self.last_rotation_date = datetime.now().date()
 
-        print("=" * 60)
-        print(f"\u2705 LOG ROTATION COMPLETED")
-        print("=" * 60 + "\n")
+        # Log completion to main log only
+        main_log = self.get_system_log_folder("main") / "main.log"
+        if main_log.exists():
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(main_log, "a", encoding="utf-8") as f:
+                f.write(f"{timestamp} | Log rotation completed: {len(log_files)} files rotated\n")
 
     def check_and_rotate_if_needed(self):
         """Check if it's past midnight and rotate logs if needed"""
@@ -194,7 +165,7 @@ class LogRotator:
 
         thread = threading.Thread(target=rotation_worker, daemon=True)
         thread.start()
-        print("\U0001F557 Log rotation monitor started (checks at midnight)")
+        # Silently start - no console output
         return thread
 
     def get_log_stats(self, folder_path: Path, log_name: str) -> dict:
@@ -257,9 +228,23 @@ if __name__ == "__main__":
     rotator = LogRotator(LOG_FOLDER, max_backups=5)
 
     if len(sys.argv) > 1 and sys.argv[1] == "--rotate":
-        # Manual rotation
+        # Manual rotation with verbose output
         print("\U0001F504 Performing manual log rotation...")
+
+        # Find all .log files
+        log_files = []
+        for folder in [rotator.system_folder, rotator.cameras_folder]:
+            if folder.exists():
+                for log_file in folder.rglob("*.log"):
+                    if not any(log_file.stem.endswith(f".{i}") for i in range(1, rotator.max_backups + 1)):
+                        log_files.append(log_file)
+
+        print(f"Found {len(log_files)} log files to rotate")
+
+        # Rotate
         rotator.rotate_all_logs()
+
+        print("✅ Rotation complete")
 
     elif len(sys.argv) > 1 and sys.argv[1] == "--stats":
         # Show statistics
@@ -270,7 +255,7 @@ if __name__ == "__main__":
         # System logs
         print("\n\U0001F4C1 SYSTEM LOGS")
         print("-" * 60)
-        for log_name in ["main", "token", "performance"]:
+        for log_name in ["main", "token", "performance", "webserver"]:
             folder = rotator.get_system_log_folder(log_name)
             log_file = folder / f"{log_name}.log"
             if log_file.exists():
