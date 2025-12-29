@@ -244,9 +244,9 @@ def schedule_midnight_cleanup():
 async def countdown(seconds: int):
     """Display countdown timer on console only"""
     for remaining in range(seconds, 0, -1):
-        print(f"\rWaiting {remaining} seconds for next snapshot...", end="", flush=True)
+        # print(f"\rWaiting {remaining} seconds for next snapshot...", end="", flush=True)
         await asyncio.sleep(1)
-    print("\rStarting next snapshot...               ", flush=True)
+    # print("\rStarting next snapshot...               ", flush=True)
 
 
 async def wait_until_next_interval(interval_seconds):
@@ -260,9 +260,9 @@ async def wait_until_next_interval(interval_seconds):
 
     # Live countdown - only thing shown on console
     for remaining in range(seconds_to_wait, 0, -1):
-        print(f"\rWaiting {remaining} seconds for next snapshot...", end="", flush=True)
+        # print(f"\rWaiting {remaining} seconds for next snapshot...", end="", flush=True)
         await asyncio.sleep(1)
-    print("\rStarting next snapshot...               ", flush=True)
+    # print("\rStarting next snapshot...               ", flush=True)
 
 
 def with_timeout(seconds):

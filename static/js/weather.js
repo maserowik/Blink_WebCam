@@ -1,28 +1,13 @@
-// weather.js - Weather widget functionality with scheduled updates
+// weather.js - Weather widget functionality (server-side cache only)
+// FIXED: Removed client-side scheduling to prevent excessive API calls
 
 // ============================================================================
 // WEATHER WIDGET
 // ============================================================================
 
-let cachedWeatherData = null;
-let lastFetchTime = null;
-
-async function fetchWeather(forceRefresh = false) {
+async function fetchWeather() {
     const widget = document.getElementById('weather-widget');
-    
-    // Check if we should use cached data
-    if (!forceRefresh && cachedWeatherData && lastFetchTime) {
-        const now = new Date();
-        const timeSinceLastFetch = now - lastFetchTime;
-        
-        // Use cache if less than 30 minutes old
-        if (timeSinceLastFetch < 30 * 60 * 1000) {
-            console.log('Using cached weather data');
-            displayWeather(cachedWeatherData);
-            return;
-        }
-    }
-    
+
     try {
         const resp = await fetch('/api/weather', {
             method: 'GET',
@@ -41,51 +26,47 @@ async function fetchWeather(forceRefresh = false) {
             throw new Error('Invalid weather data format');
         }
 
-        // Cache the data
-        cachedWeatherData = data;
-        lastFetchTime = new Date();
-        
-        console.log(`Weather fetched at ${lastFetchTime.toLocaleTimeString()}`);
         displayWeather(data);
 
     } catch (e) {
         console.error('Weather fetch error:', e);
-        
-        // If we have cached data, use it even if expired
-        if (cachedWeatherData) {
-            console.log('Using expired cache due to fetch error');
-            displayWeather(cachedWeatherData);
-        } else {
-            showWeatherError();
-        }
+        showWeatherError();
     }
 }
 
 function displayWeather(data) {
     const widget = document.getElementById('weather-widget');
     const current = data.current_condition[0];
-    
-    // Icon mapping
+
+    // Icon mapping using HTML entity codes
     const iconMap = {
-        'Sunny': '&#x2600;&#xFE0F;',
-        'Clear': '&#x1F319;',
-        'Partly cloudy': '&#x26C5;',
-        'Cloudy': '&#x2601;&#xFE0F;',
-        'Overcast': '&#x2601;&#xFE0F;',
-        'Mist': '&#x1F32B;&#xFE0F;',
-        'Fog': '&#x1F32B;&#xFE0F;',
-        'Light rain': '&#x1F327;&#xFE0F;',
-        'Moderate rain': '&#x1F327;&#xFE0F;',
-        'Heavy rain': '&#x26C8;&#xFE0F;',
-        'Light snow': '&#x1F328;&#xFE0F;',
-        'Heavy snow': '&#x2744;&#xFE0F;',
-        'Thunderstorm': '&#x26C8;&#xFE0F;'
+        'Sunny': '\u2600\uFE0F',
+        'Clear': '\uD83C\uDF19',
+        'Partly cloudy': '\u26C5',
+        'Partly Cloudy': '\u26C5',
+        'Mostly Clear': '\u26C5',
+        'Mostly Cloudy': '\u2601\uFE0F',
+        'Cloudy': '\u2601\uFE0F',
+        'Overcast': '\u2601\uFE0F',
+        'Mist': '\uD83C\uDF2B\uFE0F',
+        'Fog': '\uD83C\uDF2B\uFE0F',
+        'Light rain': '\uD83C\uDF27\uFE0F',
+        'Light Rain': '\uD83C\uDF27\uFE0F',
+        'Moderate rain': '\uD83C\uDF27\uFE0F',
+        'Heavy rain': '\u26C8\uFE0F',
+        'Light snow': '\uD83C\uDF28\uFE0F',
+        'Heavy snow': '\u2744\uFE0F',
+        'Thunderstorm': '\u26C8\uFE0F',
+        'Rain': '\uD83C\uDF27\uFE0F',
+        'Drizzle': '\uD83C\uDF27\uFE0F',
+        'Snow': '\u2744\uFE0F',
+        'Flurries': '\uD83C\uDF28\uFE0F'
     };
 
-    const icon = iconMap[current.weatherDesc[0].value] || '&#x1F321;&#xFE0F;';
+    const condition = current.weatherDesc[0].value;
+    const icon = iconMap[condition] || '\uD83C\uDF21\uFE0F';
     const tempF = current.temp_F;
     const feelsLike = current.FeelsLikeF;
-    const condition = current.weatherDesc[0].value;
     const humidity = current.humidity;
 
     widget.innerHTML = `
@@ -108,7 +89,7 @@ function showWeatherError() {
     const widget = document.getElementById('weather-widget');
     widget.innerHTML = `
         <div class="weather-main">
-            <div class="weather-icon">&#x1F321;&#xFE0F;</div>
+            <div class="weather-icon">\uD83C\uDF21\uFE0F</div>
             <div>
                 <div class="weather-temp">--°F</div>
                 <div class="weather-details">Service unavailable</div>
@@ -122,60 +103,16 @@ function showWeatherError() {
 }
 
 // ============================================================================
-// SCHEDULED WEATHER UPDATES
-// ============================================================================
-
-function getMillisecondsUntilNextScheduledTime() {
-    const now = new Date();
-    const minutes = now.getMinutes();
-    const seconds = now.getSeconds();
-    const milliseconds = now.getMilliseconds();
-    
-    let minutesUntilNext;
-    
-    if (minutes < 30) {
-        // Next update at :30
-        minutesUntilNext = 30 - minutes;
-    } else {
-        // Next update at :00 (next hour)
-        minutesUntilNext = 60 - minutes;
-    }
-    
-    // Calculate total milliseconds, accounting for current seconds/milliseconds
-    const totalMs = (minutesUntilNext * 60 * 1000) - (seconds * 1000) - milliseconds;
-    
-    return totalMs;
-}
-
-function scheduleNextWeatherUpdate() {
-    const msUntilNext = getMillisecondsUntilNextScheduledTime();
-    const nextUpdate = new Date(Date.now() + msUntilNext);
-    
-    console.log(`Next weather update scheduled for ${nextUpdate.toLocaleTimeString()}`);
-    
-    setTimeout(() => {
-        console.log('Scheduled weather update running...');
-        fetchWeather(true); // Force refresh
-        
-        // Schedule the next update (30 minutes from now)
-        setTimeout(() => {
-            scheduleNextWeatherUpdate();
-        }, 100); // Small delay to ensure we're past the update time
-        
-    }, msUntilNext);
-}
-
-// ============================================================================
-// INITIALIZE WEATHER
+// INITIALIZE WEATHER (ONE-TIME FETCH ON PAGE LOAD)
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initial fetch on page load
-    fetchWeather(true);
-    
-    // Schedule future updates at :00 and :30
-    scheduleNextWeatherUpdate();
-    
-    // Also set up a 30-minute interval as backup (uses cache if not at scheduled time)
-    setInterval(() => fetchWeather(false), 30 * 60 * 1000);
+    // Fetch weather once on page load
+    // Server caches for 30 minutes, so we don't need client-side polling
+    fetchWeather();
+
+    console.log('Weather: Using server-side cache (30-minute refresh)');
 });
+
+// Export for manual refresh if needed
+window.refreshWeather = fetchWeather;

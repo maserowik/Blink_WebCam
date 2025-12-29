@@ -553,20 +553,30 @@ def api_radar_config():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+# ============================================================================
+# COMPLETE WEATHER API FIX
+# Replace the @app.route('/api/weather') function in Blink_Web_Server.py
+# (around line 550-650)
+# ============================================================================
+
 @app.route('/api/weather')
 def api_weather():
-    """Fetch weather data from Tomorrow.io API with server-side caching"""
+    """Fetch weather data from Tomorrow.io API with robust server-side caching"""
     start_time = time.time()
-    
+
+    # Check cache first
     with weather_cache['lock']:
         if weather_cache['data'] and weather_cache['timestamp']:
             cache_age = (datetime.now() - weather_cache['timestamp']).total_seconds()
+
+            # Use cache if less than 30 minutes old
             if cache_age < WEATHER_CACHE_DURATION:
                 duration = time.time() - start_time
                 log_web(f"Serving cached weather data (age: {int(cache_age)}s)")
                 log_web_performance(f"GET /api/weather | {duration:.2f}s | CACHED")
                 return jsonify(weather_cache['data'])
 
+    # Cache expired or doesn't exist, fetch new data
     try:
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
@@ -592,69 +602,97 @@ def api_weather():
         }
 
         log_web(f"Fetching weather from Tomorrow.io Timelines API for {lat},{lon}")
-        response = requests.get(url, params=params, timeout=10)
 
-        if response.status_code == 200:
-            data = response.json()
+        # IMPROVED: Longer timeout with retry logic
+        max_retries = 2
+        last_error = None
 
-            timelines = data.get("data", {}).get("timelines", [])
-            if not timelines or not timelines[0].get("intervals"):
-                return jsonify({"error": "Invalid weather data format"}), 500
+        for attempt in range(max_retries):
+            try:
+                response = requests.get(url, params=params, timeout=15)  # Increased from 10 to 15
 
-            values = timelines[0]["intervals"][0]["values"]
+                if response.status_code == 200:
+                    data = response.json()
 
-            weather_code = values.get("weatherCode", 0)
-            weather_desc = map_weather_code(weather_code)
+                    timelines = data.get("data", {}).get("timelines", [])
+                    if not timelines or not timelines[0].get("intervals"):
+                        log_web("ERROR: Invalid weather data format from API")
+                        break
 
-            formatted_response = {
-                "current_condition": [{
-                    "temp_F": str(int(values.get("temperature", 0))),
-                    "FeelsLikeF": str(int(values.get("temperatureApparent", 0))),
-                    "humidity": str(int(values.get("humidity", 0))),
-                    "weatherDesc": [{"value": weather_desc}],
-                    "windspeedMiles": str(int(values.get("windSpeed", 0))),
-                    "winddir16Point": get_wind_direction(values.get("windDirection", 0)),
-                    "precipMM": str(values.get("precipitationIntensity", 0)),
-                    "pressure": str(int(values.get("pressureSeaLevel", 0)))
-                }]
-            }
+                    values = timelines[0]["intervals"][0]["values"]
 
-            with weather_cache['lock']:
-                weather_cache['data'] = formatted_response
-                weather_cache['timestamp'] = datetime.now()
+                    weather_code = values.get("weatherCode", 0)
+                    weather_desc = map_weather_code(weather_code)
 
-            duration = time.time() - start_time
-            log_web(f"Weather fetched successfully: {weather_desc}, {values.get('temperature')}°F")
-            log_web_performance(f"GET /api/weather | {duration:.2f}s | SUCCESS")
-            return jsonify(formatted_response)
+                    formatted_response = {
+                        "current_condition": [{
+                            "temp_F": str(int(values.get("temperature", 0))),
+                            "FeelsLikeF": str(int(values.get("temperatureApparent", 0))),
+                            "humidity": str(int(values.get("humidity", 0))),
+                            "weatherDesc": [{"value": weather_desc}],
+                            "windspeedMiles": str(int(values.get("windSpeed", 0))),
+                            "winddir16Point": get_wind_direction(values.get("windDirection", 0)),
+                            "precipMM": str(values.get("precipitationIntensity", 0)),
+                            "pressure": str(int(values.get("pressureSeaLevel", 0)))
+                        }]
+                    }
 
-        elif response.status_code == 429:
-            log_web(f"Tomorrow.io API rate limit hit!")
-            log_web(f"Response: {response.text}")
+                    # Cache the successful response
+                    with weather_cache['lock']:
+                        weather_cache['data'] = formatted_response
+                        weather_cache['timestamp'] = datetime.now()
 
-            with weather_cache['lock']:
-                if weather_cache['data']:
-                    cache_age = (datetime.now() - weather_cache['timestamp']).total_seconds()
-                    log_web(f"Returning stale cached data (age: {int(cache_age)}s) due to rate limit")
                     duration = time.time() - start_time
-                    log_web_performance(f"GET /api/weather | {duration:.2f}s | RATE_LIMIT_CACHED")
-                    return jsonify(weather_cache['data'])
+                    log_web(f"Weather fetched successfully: {weather_desc}, {values.get('temperature')}°F")
+                    log_web_performance(f"GET /api/weather | {duration:.2f}s | SUCCESS")
+                    return jsonify(formatted_response)
 
-            duration = time.time() - start_time
-            log_web_performance(f"GET /api/weather | {duration:.2f}s | RATE_LIMIT")
-            return jsonify({"error": "Weather service rate limit exceeded"}), 429
-        else:
-            log_web(f"Tomorrow.io API error: {response.status_code}")
-            log_web(f"Response: {response.text}")
-            duration = time.time() - start_time
-            log_web_performance(f"GET /api/weather | {duration:.2f}s | HTTP_{response.status_code}")
-            return jsonify({"error": "Weather service unavailable"}), 503
+                elif response.status_code == 429:
+                    log_web(f"Tomorrow.io API rate limit hit!")
+                    log_web(f"Response: {response.text}")
+                    break  # Don't retry on rate limit
+
+                else:
+                    log_web(f"Tomorrow.io API error: {response.status_code}")
+                    log_web(f"Response: {response.text}")
+                    last_error = f"HTTP {response.status_code}"
+
+            except requests.exceptions.Timeout as e:
+                last_error = f"Timeout (attempt {attempt + 1}/{max_retries})"
+                log_web(f"Weather API timeout on attempt {attempt + 1}/{max_retries}")
+
+                if attempt < max_retries - 1:
+                    # Wait before retry (exponential backoff)
+                    wait_time = (attempt + 1) * 2
+                    log_web(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+
+            except requests.exceptions.RequestException as e:
+                last_error = str(e)
+                log_web(f"Weather API request error: {e}")
+                break  # Don't retry on connection errors
+
+        # If we get here, all retries failed
+        duration = time.time() - start_time
+
+        # Return cached data if available (even if expired)
+        with weather_cache['lock']:
+            if weather_cache['data']:
+                cache_age = (datetime.now() - weather_cache['timestamp']).total_seconds()
+                log_web(f"Returning cached data (age: {int(cache_age)}s) due to error")
+                log_web_performance(f"GET /api/weather | {duration:.2f}s | ERROR_CACHED")
+                return jsonify(weather_cache['data'])
+
+        # No cache available
+        log_web_performance(f"GET /api/weather | {duration:.2f}s | ERROR_NO_CACHE")
+        return jsonify({"error": f"Weather service unavailable: {last_error}"}), 503
 
     except Exception as e:
         duration = time.time() - start_time
         log_web_error(f"Error fetching weather (took {duration:.2f}s): {e}", e)
         log_web_performance(f"GET /api/weather | {duration:.2f}s | ERROR")
 
+        # Return cached data if available
         with weather_cache['lock']:
             if weather_cache['data']:
                 cache_age = (datetime.now() - weather_cache['timestamp']).total_seconds()
