@@ -1,5 +1,5 @@
 // radar.js - Radar widget with Mapbox integration, RainViewer API, and timestamps
-// FIXED: Improved radar refresh to prevent disappearing images
+// FIXED: 12-hour time format with AM/PM
 
 // ============================================================================
 // RADAR WIDGET CLASS
@@ -15,7 +15,7 @@ class RadarWidget {
         this.animationInterval = null;
         this.availableTimes = [];
         this.timestampElement = null;
-        this.isRefreshing = false;  // NEW: Prevent concurrent refreshes
+        this.isRefreshing = false;
 
         this.init();
     }
@@ -101,9 +101,17 @@ class RadarWidget {
 
     formatTimestamp(unixTimestamp) {
         const date = new Date(unixTimestamp * 1000);
-        const hours = date.getHours().toString().padStart(2, '0');
+
+        // Get hours and convert to 12-hour format
+        let hours = date.getHours();
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12; // Convert 0 to 12
+
+        // Get minutes with leading zero
         const minutes = date.getMinutes().toString().padStart(2, '0');
-        return `${hours}:${minutes} RainViewer.com`;
+
+        return `${hours}:${minutes} ${ampm} RainViewer.com`;
     }
 
     updateTimestamp(frameIndex) {
@@ -145,7 +153,7 @@ class RadarWidget {
                     type: 'raster',
                     tiles: [tileUrl],
                     tileSize: 256,
-                    maxzoom: 12  // NEW: Prevent over-zooming causing missing tiles
+                    maxzoom: 12
                 });
 
                 this.mapInstance.addLayer({
@@ -154,14 +162,14 @@ class RadarWidget {
                     source: layerId,
                     paint: {
                         'raster-opacity': i === this.availableTimes.length - 1 ? 0.7 : 0,
-                        'raster-fade-duration': 0  // NEW: Disable fade to see tiles immediately
+                        'raster-fade-duration': 0
                     }
                 });
 
                 this.radarLayers.push(layerId);
             }
 
-            // NEW: Wait for tiles to load before showing
+            // Wait for tiles to load
             await this.waitForTilesToLoad();
 
             // Set initial timestamp to most recent frame
@@ -179,7 +187,6 @@ class RadarWidget {
         }
     }
 
-    // NEW: Wait for tiles to actually load
     async waitForTilesToLoad() {
         return new Promise((resolve) => {
             let tilesLoaded = 0;
@@ -209,7 +216,6 @@ class RadarWidget {
     }
 
     async refreshRadarData() {
-        // NEW: Prevent concurrent refreshes
         if (this.isRefreshing) {
             console.log('Refresh already in progress, skipping...');
             return;
@@ -218,12 +224,10 @@ class RadarWidget {
         this.isRefreshing = true;
         console.log('Refreshing radar data...');
 
-        // CRITICAL: Save reference to old layers BEFORE any async operations
         const oldLayers = [...this.radarLayers];
         const oldInterval = this.animationInterval;
 
         try {
-            // Get new available times
             const apiUrl = 'https://api.rainviewer.com/public/weather-maps.json';
             const response = await fetch(apiUrl, {
                 cache: 'no-cache'
@@ -244,7 +248,6 @@ class RadarWidget {
             const frames = this.config.frames || 5;
             const newTimes = data.radar.past.slice(-frames).map(item => item.time);
 
-            // Check if we have new data
             const latestOld = this.availableTimes[this.availableTimes.length - 1];
             const latestNew = newTimes[newTimes.length - 1];
 
@@ -255,10 +258,7 @@ class RadarWidget {
             }
 
             console.log('New radar data detected, updating layers...');
-            console.log('Old times:', this.availableTimes);
-            console.log('New times:', newTimes);
 
-            // STEP 1: Create new layers FIRST (before removing old ones)
             const newLayers = [];
             const newLayerPrefix = `radar-layer-new-${Date.now()}-`;
 
@@ -284,14 +284,13 @@ class RadarWidget {
                             type: 'raster',
                             source: layerId,
                             paint: {
-                                'raster-opacity': 0,  // Start hidden
+                                'raster-opacity': 0,
                                 'raster-fade-duration': 0
                             }
                         });
 
                         newLayers.push(layerId);
                         success = true;
-                        console.log(`Added new layer: ${layerId}`);
 
                     } catch (err) {
                         console.warn(`Retry ${4 - retries}/3 for layer ${layerId}:`, err);
@@ -299,14 +298,11 @@ class RadarWidget {
 
                         if (retries > 0) {
                             await new Promise(resolve => setTimeout(resolve, 500));
-                        } else {
-                            console.error(`Failed to add layer ${layerId} after 3 retries`);
                         }
                     }
                 }
             }
 
-            // Verify we have new layers
             if (newLayers.length === 0) {
                 console.error('CRITICAL: No new radar layers created!');
                 this.showRadarError('Radar refresh failed');
@@ -314,27 +310,17 @@ class RadarWidget {
                 return;
             }
 
-            console.log(`Successfully created ${newLayers.length} new radar layers`);
-
-            // STEP 2: Wait for new tiles to load (CRITICAL!)
-            console.log('Waiting for new tiles to load...');
             await new Promise(resolve => setTimeout(resolve, 3000));
 
-            // STEP 3: Stop old animation
             if (oldInterval) {
                 clearInterval(oldInterval);
                 this.animationInterval = null;
-                console.log('Stopped old animation');
             }
 
-            // STEP 4: Switch to new layers atomically
             this.radarLayers = newLayers;
             this.availableTimes = newTimes;
             this.currentFrame = 0;
 
-            console.log('Switched to new layers:', this.radarLayers);
-
-            // STEP 5: Remove old layers NOW (after switch)
             for (const layerId of oldLayers) {
                 try {
                     if (this.mapInstance.getLayer(layerId)) {
@@ -343,25 +329,17 @@ class RadarWidget {
                     if (this.mapInstance.getSource(layerId)) {
                         this.mapInstance.removeSource(layerId);
                     }
-                    console.log(`Removed old layer: ${layerId}`);
                 } catch (err) {
                     console.warn(`Error removing old layer ${layerId}:`, err);
                 }
             }
 
-            console.log('Removed old layers');
-
-            // STEP 6: Make most recent frame visible
             const latestFrame = this.radarLayers[this.radarLayers.length - 1];
             if (this.mapInstance.getLayer(latestFrame)) {
                 this.mapInstance.setPaintProperty(latestFrame, 'raster-opacity', 0.7);
-                console.log(`Made latest frame visible: ${latestFrame}`);
             }
 
-            // Update timestamp to most recent frame
             this.updateTimestamp(this.availableTimes.length - 1);
-
-            // STEP 7: Start new animation
             this.startAnimation();
 
             console.log('Radar refresh complete!');
@@ -370,9 +348,7 @@ class RadarWidget {
             console.error('Error refreshing radar data:', error);
             this.showRadarError('Refresh failed');
 
-            // Restore old animation if it was stopped
             if (!this.animationInterval && oldLayers.length > 0) {
-                console.log('Restoring old animation after error');
                 this.radarLayers = oldLayers;
                 this.startAnimation();
             }
@@ -383,7 +359,6 @@ class RadarWidget {
     }
 
     startAnimation() {
-        // NEW: Clear any existing animation first
         if (this.animationInterval) {
             clearInterval(this.animationInterval);
             this.animationInterval = null;
@@ -394,34 +369,27 @@ class RadarWidget {
             return;
         }
 
-        // Start from most recent frame
         this.currentFrame = this.radarLayers.length - 1;
 
         this.animationInterval = setInterval(() => {
             try {
-                // NEW: Check if layer still exists before manipulating
                 const currentLayer = this.radarLayers[this.currentFrame];
                 if (!this.mapInstance.getLayer(currentLayer)) {
                     console.error(`Layer ${currentLayer} disappeared! Stopping animation.`);
                     clearInterval(this.animationInterval);
                     this.animationInterval = null;
-
-                    // Show error in timestamp
                     this.showRadarError('Radar lost - refresh page');
                     return;
                 }
 
-                // Hide current frame
                 this.mapInstance.setPaintProperty(
                     currentLayer,
                     'raster-opacity',
                     0
                 );
 
-                // Move to next frame
                 this.currentFrame = (this.currentFrame + 1) % this.radarLayers.length;
 
-                // NEW: Check next layer exists too
                 const nextLayer = this.radarLayers[this.currentFrame];
                 if (!this.mapInstance.getLayer(nextLayer)) {
                     console.error(`Layer ${nextLayer} disappeared! Stopping animation.`);
@@ -431,25 +399,22 @@ class RadarWidget {
                     return;
                 }
 
-                // Show next frame
                 this.mapInstance.setPaintProperty(
                     nextLayer,
                     'raster-opacity',
                     0.7
                 );
 
-                // Update timestamp for current frame
                 this.updateTimestamp(this.currentFrame);
 
             } catch (err) {
                 console.error('Error in animation loop:', err);
-                // NEW: Stop animation if errors occur
                 clearInterval(this.animationInterval);
                 this.animationInterval = null;
                 this.showRadarError('Animation error');
             }
 
-        }, 800); // Change frame every 800ms
+        }, 800);
 
         console.log('Radar animation started');
     }
@@ -486,7 +451,6 @@ async function loadRadar() {
         console.log('Radar enabled:', config.enabled);
         console.log('Mapbox token present:', !!config.mapbox_token);
 
-        // Handle both boolean and string values for enabled
         const isEnabled = (config.enabled === true || config.enabled === 'true');
         const hasToken = config.mapbox_token && config.mapbox_token.trim() !== '';
 
