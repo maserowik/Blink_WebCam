@@ -896,3 +896,119 @@ footer {
 .camera-card.stale-images.snoozed .stale-badge {
     top: 80px; /* Move below snooze badge */
 }
+
+
+/* ============================================================================
+   NWS ALERT WIDGET STYLES
+   ============================================================================ */
+
+.nws-alert-widget {
+    display: none;  /* Hidden by default */
+    background: var(--card-bg);
+    color: var(--card-text);
+    border-radius: clamp(8px, 1.5vw, 12px);
+    min-width: clamp(180px, 30vw, 250px);
+    height: 200px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    padding: clamp(10px, 2vw, 15px);
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+/* Fade in/out animations */
+.nws-alert-widget.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+.nws-alert-widget.fade-out {
+    animation: fadeOut 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-10px); }
+}
+
+/* Alert content container */
+.nws-alert-content {
+    width: 100%;
+    height: 100%;
+    transition: opacity 0.3s ease-in-out;
+    display: flex;
+    align-items: center;
+}
+
+.nws-alert-content.fade-in {
+    opacity: 1;
+}
+
+.nws-alert-content.fade-out {
+    opacity: 0;
+}
+
+/* Alert text */
+.nws-alert-text {
+    font-size: clamp(0.75em, 1.8vw, 0.9em);
+    line-height: 1.6;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* "NWS Alert:" prefix - RED, BOLD, BLINKING */
+.nws-alert-prefix {
+    color: #dc2626;  /* Red */
+    font-weight: bold;
+    animation: blink 2s infinite;
+}
+
+/* Alert description - normal text */
+.nws-alert-description {
+    color: var(--card-text);
+    font-weight: normal;
+}
+
+/* Blink animation */
+@keyframes blink {
+    0%, 49% {
+        opacity: 1;  /* Visible */
+    }
+    50%, 100% {
+        opacity: 0;  /* Hidden */
+    }
+}
+
+/* Respect user's motion preferences (accessibility) */
+@media (prefers-reduced-motion: reduce) {
+    .nws-alert-prefix {
+        animation: none;
+        /* Still red and bold, just not blinking */
+    }
+
+    .nws-alert-widget.fade-in,
+    .nws-alert-widget.fade-out,
+    .nws-alert-content.fade-in,
+    .nws-alert-content.fade-out {
+        animation: none;
+        transition: none;
+    }
+}
+
+/* Responsive adjustments */
+@media(max-width: 768px) {
+    .nws-alert-widget {
+        width: 100%;
+        min-width: auto;
+        height: auto;
+        min-height: 150px;
+        max-height: 200px;
+    }
+
+    .nws-alert-text {
+        font-size: 0.85em;
+    }
+}

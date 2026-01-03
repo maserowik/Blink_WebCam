@@ -85,6 +85,10 @@
         <div class="weather-widget" id="weather-widget">
             <div class="weather-loading">Loading weather...</div>
         </div>
+        <!-- NWS Alert Widget (NEW) -->
+        <div class="nws-alert-widget" id="nws-alert-widget" style="display: none;">
+            <!-- Populated by JavaScript -->
+        </div>
         <div class="arm-toggle" id="arm-toggle" onclick="toggleArm()">
             <div class="arm-toggle-slider">
                 <span id="arm-icon">&#x1F513;</span>
@@ -141,23 +145,13 @@
             </div>
             {% endif %}
 
-            {# NEW: Offline Badge #}
-            {% if camera.alerts.is_offline %}
-            <div class="camera-offline-badge">
-                <div style="font-size: 1.2em;">&#x1F534; OFFLINE</div>
-                <div style="font-size: 0.85em; margin-top: 2px;">
-                    {{ camera.alerts.offline_reason }}
-                </div>
-            </div>
-            {% endif %}
-
             {# NEW: Duplicate Image Badge #}
             {% if camera.alerts.has_duplicates and not camera.alerts.is_offline %}
             <div class="camera-duplicate-badge">
                &#x26A0;&#xFE0F; DUPLICATE IMAGES
             </div>
             {% endif %}
-           
+
             <button class="snooze-icon-btn {% if camera.snooze_status.is_snoozed %}active{% endif %}"
                     id="snooze-btn-{{ camera.normalized_name }}"
                     onclick="openSnoozeModal('{{ camera.normalized_name }}', '{{ camera.name }}')"
@@ -245,6 +239,7 @@ window.BlinkConfig = {
 <!-- Load JavaScript modules -->
 <script src="{{ url_for('static', filename='js/snooze.js') }}"></script>
 <script src="{{ url_for('static', filename='js/radar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/nws-alerts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/camera.js') }}"></script>
 <script src="{{ url_for('static', filename='js/weather.js') }}"></script>
 <script src="{{ url_for('static', filename='js/camera-refresh.js') }}"></script>
