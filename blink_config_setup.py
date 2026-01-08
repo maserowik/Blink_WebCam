@@ -5,6 +5,7 @@ from aiohttp import ClientSession
 from blinkpy.blinkpy import Blink
 from blinkpy.auth import Auth
 from blinkpy.helpers.util import BlinkURLHandler
+from nws_alerts import validate_nws_zone
 
 CONFIG_FILE = "blink_config.json"
 TOKEN_FILE = "blink_token.json"
@@ -30,7 +31,7 @@ def get_input_with_default(prompt, default_value, value_type=str):
         try:
             return int(user_input) if user_input else default_value
         except ValueError:
-            print(f"\u26A0\uFE0F Invalid input, using default: {default_value}")
+            print(f"\u26A0 Invalid input, using default: {default_value}")
             return default_value
     elif value_type == bool:
         if user_input.upper() in ['Y', 'YES']:
@@ -90,9 +91,16 @@ async def setup_config():
                 if radar.get('mapbox_token'):
                     print(f"  Mapbox token: {radar['mapbox_token'][:20]}...")
 
+                # NWS Alerts configuration
+                nws = config.get("nws_alerts", {})
+                print("\n\u25B6 NWS ALERTS CONFIGURATION:")
+                print(f"  Enabled: {nws.get('enabled', False)}")
+                if nws.get('zone'):
+                    print(f"  Zone: {nws.get('zone')}")
+
                 print("=" * 60)
             except Exception as e:
-                print("\u26A0\uFE0F Could not read configuration:", e)
+                print(f"\u26A0 Could not read configuration: {e}")
             return
         elif choice == "R":
             print("\n\u25B6 Re-running setup...")
@@ -101,7 +109,7 @@ async def setup_config():
                 with open(CONFIG_FILE, "r") as f:
                     existing_config = json.load(f)
             except Exception as e:
-                print("\u26A0\uFE0F Could not load existing config:", e)
+                print(f"\u26A0 Could not load existing config: {e}")
 
     # Check Blink token
     if not Path(TOKEN_FILE).exists():
@@ -136,7 +144,7 @@ async def setup_config():
 
             camera_list = list(blink.cameras.keys())
             if not camera_list:
-                print("\u26A0\uFE0F No cameras found on your Blink account!")
+                print("\u26A0 No cameras found on your Blink account!")
                 return
 
             print("=" * 60)
@@ -215,7 +223,7 @@ async def setup_config():
                     data = await resp.json()
 
                 if not data:
-                    print("\u26A0\uFE0F Could not determine GPS coordinates, using defaults")
+                    print("\u26A0 Could not determine GPS coordinates, using defaults")
                     lat, lon = 40.3267, -80.0171
                 else:
                     lat = float(data[0]["lat"])
@@ -266,7 +274,7 @@ async def setup_config():
                 carousel_images = 1
             elif carousel_images > 20:
                 carousel_images = 20
-                print("\u26A0\uFE0F Limited to maximum of 20 images")
+                print("\u26A0 Limited to maximum of 20 images")
 
             # --- Tomorrow.io Weather API Configuration ---
             print("\n\u25B6 Tomorrow.io Weather API Configuration")
@@ -285,7 +293,7 @@ async def setup_config():
             weather_api_key = get_input_with_default("\nEnter Tomorrow.io API key",
                                                      weather_config["api_key"] if weather_config["api_key"] else None)
             while not weather_api_key:
-                print("\u26A0\uFE0F Tomorrow.io API key is required for weather functionality")
+                print("\u26A0 Tomorrow.io API key is required for weather functionality")
                 print("Get a free key at: https://www.tomorrow.io/weather-api/")
                 weather_api_key = input("Enter Tomorrow.io API key: ").strip()
 
@@ -317,7 +325,7 @@ async def setup_config():
                                                   radar_config["mapbox_token"] if radar_config[
                                                       "mapbox_token"] else None)
             while not mapbox_token:
-                print("\u26A0\uFE0F Mapbox API token is required for radar functionality")
+                print("\u26A0 Mapbox API token is required for radar functionality")
                 print("Get a free token at: https://account.mapbox.com/")
                 mapbox_token = input("Enter Mapbox API token: ").strip()
 
@@ -365,6 +373,64 @@ async def setup_config():
 
             print("\n\u2705 Radar configured successfully!")
 
+            # --- NWS Alert Configuration (NEW) ---
+            print("\n\u25B6 NWS Weather Alert Configuration")
+            print("-" * 60)
+            existing_nws = existing_config.get("nws_alerts", {})
+
+            print("National Weather Service alerts for your location")
+            print("Displays severe weather warnings in real-time")
+            print("Find your zone at: https://www.weather.gov/")
+            print("Example zones: PAZ021 (Pittsburgh)")
+
+            nws_enabled = get_input_with_default(
+                "\nEnable NWS weather alerts? [Y/n]",
+                existing_nws.get("enabled", False),
+                bool
+            )
+
+            nws_zone = None
+            if nws_enabled:
+                nws_zone = get_input_with_default(
+                    "Enter NWS forecast zone (e.g., PAZ021)",
+                    existing_nws.get("zone", "")
+                )
+
+                if nws_zone:
+                    print(f"\nValidating zone '{nws_zone}'...")
+                    if validate_nws_zone(nws_zone):
+                        print("\u2705 Zone validated successfully!")
+                    else:
+                        print("\u26A0 Invalid NWS zone!")
+                        print("Zone must be 6 characters: 2 state letters + Z + 3 digits")
+                        print("Example: PAZ021")
+                        print("Find your zone at: https://www.weather.gov/")
+                        retry = input("\nTry another zone? [y/N]: ").strip().upper()
+                        if retry == 'Y':
+                            nws_zone = input("Enter NWS forecast zone: ").strip().upper()
+                            if not validate_nws_zone(nws_zone):
+                                print("\u26A0 Invalid zone, NWS alerts will be disabled")
+                                nws_enabled = False
+                                nws_zone = None
+                        else:
+                            nws_enabled = False
+                            nws_zone = None
+                else:
+                    print("\u26A0 No zone provided, NWS alerts disabled")
+                    nws_enabled = False
+
+            nws_config = {
+                "enabled": nws_enabled,
+                "zone": nws_zone if nws_zone else ""
+            }
+
+            if nws_enabled:
+                print(f"\n\u2705 NWS alerts configured for zone {nws_zone}")
+                print("Alerts will appear in the dashboard header")
+                print("Polling: Every 5 minutes (2 minutes when alerts active)")
+            else:
+                print("\n\u25B6 NWS alerts disabled")
+
             # --- Save Config ---
             config = {
                 "cameras": selected_cameras,
@@ -379,7 +445,8 @@ async def setup_config():
                     "lon": lon
                 },
                 "weather": weather_config,
-                "radar": radar_config
+                "radar": radar_config,
+                "nws_alerts": nws_config
             }
 
             with open(CONFIG_FILE, "w") as f:
@@ -400,10 +467,14 @@ async def setup_config():
                 print(f"    Frames: {radar_config['frames']}")
                 print(f"    Data source: RainViewer API")
                 print(f"    Base map: Mapbox")
+            print(f"  NWS Alerts: {'Enabled' if nws_config['enabled'] else 'Disabled'}")
+            if nws_config['enabled']:
+                print(f"    Zone: {nws_config['zone']}")
+                print(f"    Polling: 5-min normal, 2-min active")
             print("=" * 60)
 
         except Exception as e:
-            print("\u274C Error during Blink setup:", e)
+            print(f"\u274C Error during Blink setup: {e}")
             import traceback
             traceback.print_exc()
 
