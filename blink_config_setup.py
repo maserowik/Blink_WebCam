@@ -385,7 +385,7 @@ async def setup_config():
 
             nws_enabled = get_input_with_default(
                 "\nEnable NWS weather alerts? [Y/n]",
-                existing_nws.get("enabled", False),
+                existing_nws.get("enabled", True),
                 bool
             )
 
