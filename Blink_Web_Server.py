@@ -27,6 +27,7 @@ LOG_FOLDER = ROOT_DIR / "logs"
 
 snooze_manager = AlertSnooze()
 logging.getLogger('blinkpy.sync_module').setLevel(logging.CRITICAL)
+logging.getLogger('waitress.queue').setLevel(logging.ERROR)
 
 # Initialize log rotator
 log_rotator = LogRotator(LOG_FOLDER, max_backups=5)
@@ -567,7 +568,6 @@ def api_snooze_cleanup():
 # ============================================================================
 # CAMERA REFRESH API (for auto-refresh without full page reload)
 # ============================================================================
-
 @app.route('/api/cameras/refresh')
 def api_cameras_refresh():
     try:
@@ -585,6 +585,35 @@ def api_cameras_refresh():
             images = get_camera_images(cam_folder, max_images=carousel_images)
             alerts = detect_camera_issues(cam_folder, cam_name, images)
 
+            # Read camera status from status.json file
+            temperature = "N/A"
+            battery = "N/A"
+            wifi = 0
+
+            status_file = cam_folder / "status.json"
+            if status_file.exists():
+                try:
+                    with open(status_file, 'r') as f:
+                        status_data = json.load(f)
+                        
+                        # Extract status values
+                        temperature = status_data.get("temperature", "N/A")
+                        battery = status_data.get("battery", "N/A")
+                        wifi_strength = status_data.get("wifi_strength", None)
+                        
+                        # Convert WiFi strength to bars (0-5)
+                        if wifi_strength is not None:
+                            wifi = wifi_bars(wifi_strength)
+                        else:
+                            wifi = 0
+                            
+                except Exception as e:
+                    log_web_error(f"Error reading status for {cam_name}", e)
+                    # Keep default N/A values on error
+            else:
+                # Status file doesn't exist yet (first run or camera never polled)
+                log_web(f"Status file not found for {cam_name}, using defaults")
+
             # Get last update time from newest image
             last_update = None
             if images:
@@ -596,9 +625,9 @@ def api_cameras_refresh():
                 "name": cam_name,
                 "normalized_name": normalized_name,
                 "images": images,
-                "temperature": "N/A",
-                "battery": "N/A",
-                "wifi": 0,
+                "temperature": temperature,
+                "battery": battery,
+                "wifi": wifi,
                 "last_update": last_update.isoformat() if last_update else None,
                 "last_update_formatted": last_update.strftime("%m/%d/%Y %I:%M:%S %p") if last_update else None,
                 "alerts": alerts

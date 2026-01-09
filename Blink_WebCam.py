@@ -440,7 +440,7 @@ async def process_single_camera(blink, cam_name, cam):
             # Still save it but mark it
             source = source + "_DUPLICATE"
 
-        # Save photo
+       # Save photo
         save_start = time.time()
         photo_path = camera_organizer.save_photo_to_date_folder(
             cam_folder,
@@ -459,11 +459,37 @@ async def process_single_camera(blink, cam_name, cam):
             log_main(f"  \u274C File not found after save!")
             log_camera(cam_name, f"ERROR: Photo file not found after save operation")
 
+        # ====================================================================
+        # NEW CODE: Save camera status to JSON file for web server
+        # ====================================================================
+        
+        status_data = {
+            "temperature": str(cam.temperature) if hasattr(cam, 'temperature') else "N/A",
+            "battery": str(cam.battery) if hasattr(cam, 'battery') else "N/A",
+            "wifi_strength": cam.wifi_strength if hasattr(cam, 'wifi_strength') else None,
+            "last_updated": datetime.now().isoformat()
+        }
+        
+        status_file = cam_folder / "status.json"
+        try:
+            with open(status_file, 'w') as f:
+                json.dump(status_data, f, indent=2)
+            log_main(f"  \u2713 Status saved: {status_file.name}")
+        except Exception as e:
+            log_main(f"  \u26A0 Error writing status file: {e}")
+            log_camera(cam_name, f"ERROR: Failed to write status.json - {e}")
+        
+        # ====================================================================
+        # END OF NEW CODE
+        # ====================================================================
+
     except Exception as e:
         log_main(f"  \u274C Save error: {e}")
         log_camera(cam_name, f"ERROR: Failed to save photo - {type(e).__name__}: {e}")
         import traceback
         log_main(traceback.format_exc())
+        
+        
 
     # Log camera info to camera-specific log
     log_entry = (
