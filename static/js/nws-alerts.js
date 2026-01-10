@@ -1,11 +1,12 @@
-// nws-alerts.js - NWS Alert Widget
-// Displays National Weather Service alerts with auto-scroll
+// nws-alerts.js - Enhanced NWS Alert Widget
+// Displays National Weather Service alerts with severity colors and auto-scroll
+// COMPLETE FILE - Replace entire static/js/nws-alerts.js with this
 
 // ============================================================================
-// NWS ALERT WIDGET CLASS
+// ENHANCED NWS ALERT WIDGET CLASS
 // ============================================================================
 
-class NWSAlertWidget {
+class EnhancedNWSAlertWidget {
     constructor(containerId) {
         this.container = document.getElementById(containerId);
         if (!this.container) {
@@ -18,6 +19,15 @@ class NWSAlertWidget {
         this.scrollInterval = null;
         this.isScrolling = false;
         this.nextCheckTimeout = null;
+        
+        // Severity colors
+        this.severityColors = {
+            'Extreme': '#8B0000',
+            'Severe': '#DC143C',
+            'Moderate': '#FF8C00',
+            'Minor': '#FFD700',
+            'Unknown': '#4299e1'
+        };
     }
 
     // ========================================================================
@@ -138,13 +148,33 @@ class NWSAlertWidget {
         if (this.alerts.length === 0) return;
 
         const alert = this.alerts[this.currentIndex];
-
-        // Build HTML
-        const html = `
+        
+        // Format alert text - truncate if too long for widget
+        const alertText = typeof alert === 'string' ? alert : alert.description;
+        const maxLength = 180;  // Shorter to fit widget
+        const displayText = alertText.length > maxLength ? 
+            alertText.substring(0, maxLength) + '...' : alertText;
+        
+        // Build HTML - no background color here (applied to widget itself)
+        let html = `
             <div class="nws-alert-content">
                 <div class="nws-alert-text">
-                    <span class="nws-alert-prefix">NWS Alert:</span>
-                    <span class="nws-alert-description"> ${this.escapeHtml(alert)}</span>
+        `;
+        
+        // Add severity badge only if severity info exists
+        if (alert.event || alert.severity) {
+            html += `
+                    <div class="nws-alert-severity">
+                        &#x26A0;&#xFE0F; ${alert.event || 'Weather Alert'}
+                    </div>
+            `;
+        }
+        
+        html += `
+                    <div>
+                        <span class="nws-alert-prefix">NWS Alert:</span>
+                        <span class="nws-alert-description"> ${this.escapeHtml(displayText)}</span>
+                    </div>
                 </div>
             </div>
         `;
@@ -160,10 +190,10 @@ class NWSAlertWidget {
         // Clear any existing interval
         this.stopAutoScroll();
 
-        // Scroll every 5 seconds
+        // Scroll every 8 seconds (longer for readability)
         this.scrollInterval = setInterval(() => {
             this.showNextAlert();
-        }, 5000);
+        }, 8000);
 
         this.isScrolling = true;
         console.log('NWS alert auto-scroll started');
@@ -221,10 +251,10 @@ class NWSAlertWidget {
 let nwsWidget = null;
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Initializing NWS Alert Widget...');
+    console.log('Initializing Enhanced NWS Alert Widget...');
 
     // Create widget instance
-    nwsWidget = new NWSAlertWidget('nws-alert-widget');
+    nwsWidget = new EnhancedNWSAlertWidget('nws-alert-widget');
 
     // Initial check
     if (nwsWidget) {

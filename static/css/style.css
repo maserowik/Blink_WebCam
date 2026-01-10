@@ -898,21 +898,35 @@ footer {
 }
 
 
+
 /* ============================================================================
-   NWS ALERT WIDGET STYLES
+   NWS ALERT WIDGET STYLES - MATCHING WEATHER & RADAR SIZE
+   
+   INSTRUCTIONS: In static/css/style.css, find the existing NWS section
+   (search for "NWS ALERT WIDGET") and REPLACE that entire section with this.
+   
+   The section starts around line 680-750 and begins with:
+   /* ============================================================================
+      NWS ALERT WIDGET STYLES
+   
+   Replace everything from that comment down to the end of the NWS styles
+   (before the next major section) with the code below.
    ============================================================================ */
 
 .nws-alert-widget {
     display: none;  /* Hidden by default */
-    background: var(--card-bg);
-    color: var(--card-text);
+    background: linear-gradient(135deg, var(--alert-critical) 0%, #c53030 100%);
+    color: white;
     border-radius: clamp(8px, 1.5vw, 12px);
     min-width: clamp(180px, 30vw, 250px);
+    max-width: 250px;  /* CRITICAL: Match weather/radar max width */
     height: 200px;
     box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-    padding: clamp(10px, 2vw, 15px);
+    padding: clamp(10px, 2vw, 15px) clamp(15px, 3vw, 25px);
     overflow: hidden;
     transition: all 0.3s ease;
+    flex-shrink: 0;
+    box-sizing: border-box;
 }
 
 /* Fade in/out animations */
@@ -938,9 +952,11 @@ footer {
 .nws-alert-content {
     width: 100%;
     height: 100%;
-    transition: opacity 0.3s ease-in-out;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    transition: opacity 0.3s ease-in-out;
 }
 
 .nws-alert-content.fade-in {
@@ -951,24 +967,40 @@ footer {
     opacity: 0;
 }
 
-/* Alert text */
+/* Alert text styling */
 .nws-alert-text {
     font-size: clamp(0.75em, 1.8vw, 0.9em);
-    line-height: 1.6;
+    line-height: 1.5;
     word-wrap: break-word;
     overflow-wrap: break-word;
+    color: white;
+    text-align: left;
+    width: 100%;
 }
 
-/* "NWS Alert:" prefix - RED, BOLD, BLINKING */
-.nws-alert-prefix {
-    color: #dc2626;  /* Red */
+/* Severity badge at top */
+.nws-alert-severity {
+    font-size: clamp(0.65em, 1.5vw, 0.75em);
     font-weight: bold;
+    margin-bottom: 6px;
+    padding: 3px 6px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 3px;
+    display: inline-block;
+}
+
+/* "NWS Alert:" prefix - WHITE, BOLD, BLINKING */
+.nws-alert-prefix {
+    color: #ffffff;
+    font-weight: bold;
+    text-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
     animation: blink 2s infinite;
+    font-size: 1em;
 }
 
 /* Alert description - normal text */
 .nws-alert-description {
-    color: var(--card-text);
+    color: #ffffff;
     font-weight: normal;
 }
 
@@ -978,7 +1010,7 @@ footer {
         opacity: 1;  /* Visible */
     }
     50%, 100% {
-        opacity: 0;  /* Hidden */
+        opacity: 0.3;  /* Dimmed */
     }
 }
 
@@ -986,7 +1018,7 @@ footer {
 @media (prefers-reduced-motion: reduce) {
     .nws-alert-prefix {
         animation: none;
-        /* Still red and bold, just not blinking */
+        /* Still white and bold, just not blinking */
     }
 
     .nws-alert-widget.fade-in,
@@ -998,7 +1030,7 @@ footer {
     }
 }
 
-/* Responsive adjustments */
+/* Responsive adjustments - match weather widget behavior */
 @media(max-width: 768px) {
     .nws-alert-widget {
         width: 100%;
@@ -1010,5 +1042,21 @@ footer {
 
     .nws-alert-text {
         font-size: 0.85em;
+    }
+
+    .nws-alert-severity {
+        font-size: 0.75em;
+    }
+}
+
+/* Ensure widgets stay in a row on larger screens */
+@media(min-width: 769px) {
+    /* Make sure all widgets have consistent sizing */
+    .weather-widget,
+    .radar-widget,
+    .nws-alert-widget {
+        min-width: clamp(180px, 30vw, 250px);
+        max-width: 250px;
+        height: 200px;
     }
 }
