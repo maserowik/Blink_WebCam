@@ -67,7 +67,7 @@ function displayWeather(data) {
     const icon = iconMap[condition] || '\uD83C\uDF21\uFE0F';
     const tempF = current.temp_F;
     const feelsLike = current.FeelsLikeF;
-    const humidity = current.humidity;
+    const humidity = Math.round(current.humidity);
 
     widget.innerHTML = `
         <div class="weather-main">
