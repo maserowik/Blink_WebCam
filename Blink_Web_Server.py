@@ -158,6 +158,51 @@ def get_camera_images(camera_folder: Path, max_images: int = 5) -> list:
     return images
 
 
+def read_camera_status(camera_folder: Path) -> dict:
+    """
+    Read camera status from status.json file
+    
+    Returns:
+        Dictionary with temperature, battery, wifi_strength
+    """
+    status_file = camera_folder / "status.json"
+    
+    # Default values
+    default_status = {
+        "temperature": "N/A",
+        "battery": "N/A",
+        "wifi_strength": None
+    }
+    
+    if not status_file.exists():
+        log_web(f"Status file not found: {status_file}")
+        return default_status
+    
+    try:
+        with open(status_file, 'r') as f:
+            status_data = json.load(f)
+        
+        # Extract values with defaults
+        temperature = status_data.get("temperature", "N/A")
+        battery = status_data.get("battery", "N/A")
+        wifi_strength = status_data.get("wifi_strength", None)
+        
+        log_web(f"Read status from {status_file.name}: temp={temperature}, battery={battery}, wifi={wifi_strength}")
+        
+        return {
+            "temperature": temperature,
+            "battery": battery,
+            "wifi_strength": wifi_strength
+        }
+        
+    except json.JSONDecodeError as e:
+        log_web_error(f"JSON decode error reading {status_file}", e)
+        return default_status
+    except Exception as e:
+        log_web_error(f"Error reading status file {status_file}", e)
+        return default_status
+
+
 def detect_camera_issues(camera_folder: Path, camera_name: str, images: list) -> dict:
     """
     Detect camera issues:
@@ -315,14 +360,21 @@ def index():
             images = get_camera_images(cam_folder, max_images=carousel_images)
             alerts = detect_camera_issues(cam_folder, cam_name, images)
             snooze_status = snooze_manager.get_snooze_status(normalized_name)
+            
+            # Read status from status.json file
+            status = read_camera_status(cam_folder)
+            temperature = status["temperature"]
+            battery = status["battery"]
+            wifi_strength = status["wifi_strength"]
+            wifi = wifi_bars(wifi_strength)
 
             cameras.append({
                 "name": cam_name,
                 "normalized_name": normalized_name,
                 "images": images,
-                "temperature": "N/A",
-                "battery": "N/A",
-                "wifi": 0,
+                "temperature": temperature,
+                "battery": battery,
+                "wifi": wifi,
                 "snooze_status": snooze_status,
                 "alerts": alerts
             })
@@ -436,7 +488,7 @@ def api_weather():
                 "temp_F": round(data["data"]["values"]["temperature"] * 9 / 5 + 32),
                 "FeelsLikeF": round(data["data"]["values"]["temperatureApparent"] * 9 / 5 + 32),
                 "humidity": data["data"]["values"]["humidity"],
-                "weatherDesc": [{"value": weather_desc}]  # ← Use text, not code
+                "weatherDesc": [{"value": weather_desc}]
             }]
         }
 
@@ -621,33 +673,11 @@ def api_cameras_refresh():
             alerts = detect_camera_issues(cam_folder, cam_name, images)
 
             # Read camera status from status.json file
-            temperature = "N/A"
-            battery = "N/A"
-            wifi = 0
-
-            status_file = cam_folder / "status.json"
-            if status_file.exists():
-                try:
-                    with open(status_file, 'r') as f:
-                        status_data = json.load(f)
-                        
-                        # Extract status values
-                        temperature = status_data.get("temperature", "N/A")
-                        battery = status_data.get("battery", "N/A")
-                        wifi_strength = status_data.get("wifi_strength", None)
-                        
-                        # Convert WiFi strength to bars (0-5)
-                        if wifi_strength is not None:
-                            wifi = wifi_bars(wifi_strength)
-                        else:
-                            wifi = 0
-                            
-                except Exception as e:
-                    log_web_error(f"Error reading status for {cam_name}", e)
-                    # Keep default N/A values on error
-            else:
-                # Status file doesn't exist yet (first run or camera never polled)
-                log_web(f"Status file not found for {cam_name}, using defaults")
+            status = read_camera_status(cam_folder)
+            temperature = status["temperature"]
+            battery = status["battery"]
+            wifi_strength = status["wifi_strength"]
+            wifi = wifi_bars(wifi_strength)
 
             # Get last update time from newest image
             last_update = None
