@@ -136,7 +136,6 @@ def log_main(msg: str):
     line = f"{timestamp} | {msg}\n"
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(line)
-    # REMOVED: print(line.strip())  # Console output removed
 
 
 def log_token(msg: str):
@@ -148,7 +147,6 @@ def log_token(msg: str):
     line = f"{timestamp} | {msg}\n"
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(line)
-    # REMOVED: print(line.strip())  # Console output removed
 
 
 def log_performance(msg: str):
@@ -244,9 +242,7 @@ def schedule_midnight_cleanup():
 async def countdown(seconds: int):
     """Display countdown timer on console only"""
     for remaining in range(seconds, 0, -1):
-        # print(f"\rWaiting {remaining} seconds for next snapshot...", end="", flush=True)
         await asyncio.sleep(1)
-    # print("\rStarting next snapshot...               ", flush=True)
 
 
 async def wait_until_next_interval(interval_seconds):
@@ -260,9 +256,7 @@ async def wait_until_next_interval(interval_seconds):
 
     # Live countdown - only thing shown on console
     for remaining in range(seconds_to_wait, 0, -1):
-        # print(f"\rWaiting {remaining} seconds for next snapshot...", end="", flush=True)
         await asyncio.sleep(1)
-    # print("\rStarting next snapshot...               ", flush=True)
 
 
 def with_timeout(seconds):
@@ -459,10 +453,7 @@ async def process_single_camera(blink, cam_name, cam):
             log_main(f"  \u274C File not found after save!")
             log_camera(cam_name, f"ERROR: Photo file not found after save operation")
 
-        # ====================================================================
-        # NEW CODE: Save camera status to JSON file for web server
-        # ====================================================================
-        
+        # Save camera status to JSON file for web server
         status_data = {
             "temperature": str(cam.temperature) if hasattr(cam, 'temperature') else "N/A",
             "battery": str(cam.battery) if hasattr(cam, 'battery') else "N/A",
@@ -478,22 +469,16 @@ async def process_single_camera(blink, cam_name, cam):
         except Exception as e:
             log_main(f"  \u26A0 Error writing status file: {e}")
             log_camera(cam_name, f"ERROR: Failed to write status.json - {e}")
-        
-        # ====================================================================
-        # END OF NEW CODE
-        # ====================================================================
 
     except Exception as e:
         log_main(f"  \u274C Save error: {e}")
         log_camera(cam_name, f"ERROR: Failed to save photo - {type(e).__name__}: {e}")
         import traceback
         log_main(traceback.format_exc())
-        
-        
 
     # Log camera info to camera-specific log
     log_entry = (
-        f"Temp: {cam.temperature}\u00B0F | Battery: {cam.battery} | "
+        f"Temp: {cam.temperature}°F | Battery: {cam.battery} | "
         f"WiFi: {bars}/5 | Source: {source}"
     )
     log_camera(cam_name, log_entry)
@@ -502,19 +487,16 @@ async def process_single_camera(blink, cam_name, cam):
     total_duration = time.time() - start_time
     log_camera_performance(cam_name, "total_processing", total_duration, True)
 
-    # CONSOLE OUTPUT - Brief summary only
-    # print(f"\n--- {cam_name} ---")
-    # print(f"Temperature: {cam.temperature}\u00B0F")
-    # print(f"Battery: {cam.battery}")
-    # print(f"WiFi: {bars}/5")
-    # print(f"Source: {source}")
-    # print(f"Processing Time: {total_duration:.2f}s")
-    # print("----------------------\n")
+    return {
+        "camera": cam_name,
+        "success": True,
+        "duration": total_duration
+    }
 
 
 # ---------------- Main Snapshot Function ---------------- #
 async def take_snapshot(blink):
-    """Take snapshots from all configured cameras"""
+    """Take snapshots from all configured cameras (PARALLEL PROCESSING)"""
     cycle_start = time.time()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -533,34 +515,54 @@ async def take_snapshot(blink):
         log_main(f"Error refreshing blink: {e}")
         log_performance(f"global_refresh | ERROR: {e}")
 
-    # PROCESS EACH CAMERA INDEPENDENTLY (don't let one failure affect others)
-    successful = 0
-    failed = 0
+    # ========================================
+    # PARALLEL CAMERA PROCESSING
+    # ========================================
+    log_main("=" * 60)
+    log_main("STARTING PARALLEL CAMERA PROCESSING")
+    log_main("=" * 60)
 
+    # Create list of camera processing tasks
+    tasks = []
+    camera_names = []
+    
     for cam_name, cam in blink.cameras.items():
         if cam_name not in CAMERAS:
             log_main(f"Skipping {cam_name} (not in config)")
             continue
+        
+        camera_names.append(cam_name)
+        tasks.append(process_single_camera(blink, cam_name, cam))
+    
+    log_main(f"Processing {len(tasks)} cameras concurrently...")
 
-        # WRAP EACH CAMERA IN TRY/CATCH
-        try:
-            await process_single_camera(blink, cam_name, cam)
-            successful += 1
-        except Exception as e:
+    # Run all camera tasks in parallel
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Analyze results
+    successful = 0
+    failed = 0
+    
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
             failed += 1
-            log_main(f"\u274C Error processing {cam_name}: {e}")
-            log_camera(cam_name, f"CRITICAL ERROR: {type(e).__name__}: {e}")
+            cam_name = camera_names[i]
+            log_main(f"\u274C Error processing {cam_name}: {result}")
+            log_camera(cam_name, f"CRITICAL ERROR: {type(result).__name__}: {result}")
             import traceback
-            log_main(traceback.format_exc())
-            # Continue to next camera instead of failing entire loop
+            log_main(''.join(traceback.format_exception(type(result), result, result.__traceback__)))
+        elif isinstance(result, dict) and result.get("success"):
+            successful += 1
+        else:
+            failed += 1
 
     # Log cycle summary
     cycle_duration = time.time() - cycle_start
     log_main("=" * 60)
     log_main(f"Snapshot cycle complete: {successful} processed, {failed} failed")
-    log_main(f"Total cycle time: {cycle_duration:.2f}s")
+    log_main(f"Total cycle time: {cycle_duration:.2f}s (PARALLEL)")
     log_main("=" * 60)
-    log_performance(f"snapshot_cycle | {cycle_duration:.2f}s | Success:{successful} Failed:{failed}")
+    log_performance(f"snapshot_cycle_parallel | {cycle_duration:.2f}s | Success:{successful} Failed:{failed}")
 
 
 # ---------------- Main Blink Polling ---------------- #
@@ -715,31 +717,16 @@ if __name__ == "__main__":
     CAMERAS_DIR.mkdir(parents=True, exist_ok=True)
     LOG_FOLDER.mkdir(parents=True, exist_ok=True)
 
-    # STARTUP MESSAGES - Only show these on console
-    # print("=" * 70)
-    # print("BLINK WEBCAM SCRIPT STARTED")
-    # print("=" * 70)
-    # print(f"Log rotation enabled: keeps 5 days of history")
-    # print(f"Photo retention: keeps {MAX_DAYS} days of photos per camera")
-    # print(f"Poll interval: {POLL_INTERVAL // 60} minutes")
-    # print(f"Configured cameras: {len(CAMERAS)}")
-    # print(f"Duplicate detection: ENABLED")
-    # print("=" * 70)
-    # print(f"Main log: {get_current_log_file(MAIN_LOG_FOLDER, 'main')}")
-    # print(f"Token log: {get_current_log_file(TOKEN_LOG_FOLDER, 'token')}")
-    # print(f"Performance log: {get_current_log_file(PERF_LOG_FOLDER, 'performance')}")
-    # print("=" * 70)
-    # print()
-
     # Log to file (not console)
     log_main("=" * 70)
-    log_main("BLINK WEBCAM SCRIPT STARTED")
+    log_main("BLINK WEBCAM SCRIPT STARTED (PARALLEL PROCESSING)")
     log_main("=" * 70)
     log_main(f"Log rotation enabled: keeps 5 days of history")
     log_main(f"Photo retention: keeps {MAX_DAYS} days of photos per camera")
     log_main(f"Poll interval: {POLL_INTERVAL // 60} minutes")
     log_main(f"Configured cameras: {len(CAMERAS)}")
     log_main(f"Duplicate detection: ENABLED")
+    log_main(f"Processing mode: PARALLEL (all cameras at once)")
     log_main("=" * 70)
     log_main(f"Main log: {get_current_log_file(MAIN_LOG_FOLDER, 'main')}")
     log_main(f"Token log: {get_current_log_file(TOKEN_LOG_FOLDER, 'token')}")
