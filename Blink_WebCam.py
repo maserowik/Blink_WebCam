@@ -417,22 +417,39 @@ async def process_single_camera(blink, cam_name, cam):
         # Check if this image is a duplicate of the last saved image
         current_hash = hashlib.md5(image_bytes).hexdigest()
 
-        # Get the most recent saved photo for comparison
+        # Get the most recent saved photo for comparison (skip the one we're about to save)
         date_folders = sorted(cam_folder.glob("20*"), reverse=True)
         last_image_hash = None
+        existing_photos_checked = 0
+        
         for date_folder in date_folders:
             existing_photos = sorted(date_folder.glob(f"{normalize_camera_name(cam_name)}_*.jpg"),
                                      key=lambda x: x.stat().st_mtime, reverse=True)
-            if existing_photos:
-                with open(existing_photos[0], 'rb') as f:
-                    last_image_hash = hashlib.md5(f.read()).hexdigest()
+            for photo in existing_photos:
+                try:
+                    # Check timestamp - only compare with photos older than 30 seconds
+                    photo_age = time.time() - photo.stat().st_mtime
+                    if photo_age > 30:  # Only compare with photos from previous cycles
+                        with open(photo, 'rb') as f:
+                            last_image_hash = hashlib.md5(f.read()).hexdigest()
+                        existing_photos_checked += 1
+                        break
+                except Exception as e:
+                    log_camera(cam_name, f"Error reading photo for duplicate check: {e}")
+            
+            if last_image_hash:
                 break
 
-        if current_hash == last_image_hash:
+        # Only flag as duplicate if we found a previous image AND it matches
+        if last_image_hash and current_hash == last_image_hash:
             log_main(f"  \u26A0\uFE0F DUPLICATE IMAGE DETECTED - Camera may be offline/dead battery")
             log_camera(cam_name, f"WARNING: Duplicate image - camera not capturing new photos (battery dead?)")
             # Still save it but mark it
             source = source + "_DUPLICATE"
+        elif last_image_hash:
+            log_main(f"  \u2705 Image is unique (compared with previous photo)")
+        else:
+            log_main(f"  \u2139 No previous photos to compare (first run or new camera)")
 
        # Save photo
         save_start = time.time()
