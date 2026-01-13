@@ -207,7 +207,7 @@ def detect_camera_issues(camera_folder: Path, camera_name: str, images: list) ->
     """
     Detect camera issues:
     - Offline (no images)
-    - Duplicate images (same image repeated)
+    - Duplicate images (marked with _DUPLICATE in filename)
 
     Returns dict with alert info
     """
@@ -223,24 +223,16 @@ def detect_camera_issues(camera_folder: Path, camera_name: str, images: list) ->
         alerts["offline_reason"] = "No images available"
         return alerts
 
-    # Check for duplicate images by comparing file hashes
-    import hashlib
-
-    image_hashes = []
+    # Check if any recent images have "_DUPLICATE" in their path
+    # This is marked by the webcam script when it detects duplicate images
+    duplicate_count = 0
     for img_path in images[:3]:  # Check first 3 images
-        full_path = camera_folder / img_path
-        if full_path.exists():
-            try:
-                with open(full_path, 'rb') as f:
-                    file_hash = hashlib.md5(f.read()).hexdigest()
-                    image_hashes.append(file_hash)
-            except Exception as e:
-                log_web_error(f"Error reading image {img_path}", e)
-
-    # If all hashes are the same, we have duplicates
-    if len(image_hashes) >= 2 and len(set(image_hashes)) == 1:
+        if "_DUPLICATE" in img_path:
+            duplicate_count += 1
+    
+    if duplicate_count >= 2:
         alerts["has_duplicates"] = True
-        alerts["duplicate_count"] = len(image_hashes)
+        alerts["duplicate_count"] = duplicate_count
 
     return alerts
 

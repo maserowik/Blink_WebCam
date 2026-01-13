@@ -417,23 +417,28 @@ async def process_single_camera(blink, cam_name, cam):
         # Check if this image is a duplicate of the last saved image
         current_hash = hashlib.md5(image_bytes).hexdigest()
 
-        # Get the most recent saved photo for comparison (skip the one we're about to save)
+        # Get the most recent saved photo for comparison
+        # In parallel processing, we need to look back further to avoid comparing
+        # with photos from the current cycle
         date_folders = sorted(cam_folder.glob("20*"), reverse=True)
         last_image_hash = None
-        existing_photos_checked = 0
+        photos_to_skip = 0  # Number of most recent photos to skip
         
         for date_folder in date_folders:
             existing_photos = sorted(date_folder.glob(f"{normalize_camera_name(cam_name)}_*.jpg"),
                                      key=lambda x: x.stat().st_mtime, reverse=True)
+            
             for photo in existing_photos:
                 try:
-                    # Check timestamp - only compare with photos older than 30 seconds
-                    photo_age = time.time() - photo.stat().st_mtime
-                    if photo_age > 30:  # Only compare with photos from previous cycles
-                        with open(photo, 'rb') as f:
-                            last_image_hash = hashlib.md5(f.read()).hexdigest()
-                        existing_photos_checked += 1
-                        break
+                    # Skip the most recent photo (might be from current cycle)
+                    if photos_to_skip < 1:
+                        photos_to_skip += 1
+                        continue
+                    
+                    # Read the photo for comparison
+                    with open(photo, 'rb') as f:
+                        last_image_hash = hashlib.md5(f.read()).hexdigest()
+                    break
                 except Exception as e:
                     log_camera(cam_name, f"Error reading photo for duplicate check: {e}")
             
