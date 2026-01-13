@@ -77,6 +77,7 @@ else:
 POLL_INTERVAL = config.get("poll_interval", 300)  # seconds
 MAX_DAYS = config.get("max_days", 7)
 CAMERAS = config.get("cameras", [])
+DUPLICATE_WARNING_THRESHOLD = 3
 
 ROOT_DIR = Path(".")
 CAMERAS_DIR = ROOT_DIR / "cameras"
@@ -445,16 +446,30 @@ async def process_single_camera(blink, cam_name, cam):
             if last_image_hash:
                 break
 
-        # Only flag as duplicate if we found a previous image AND it matches
+      # Track consecutive duplicate snapshots (per camera)
+        dup_count_file = cam_folder / ".duplicate_count"
+        dup_count = int(dup_count_file.read_text()) if dup_count_file.exists() else 0
+
         if last_image_hash and current_hash == last_image_hash:
-            log_main(f"  \u26A0\uFE0F DUPLICATE IMAGE DETECTED - Camera may be offline/dead battery")
-            log_camera(cam_name, f"WARNING: Duplicate image - camera not capturing new photos (battery dead?)")
-            # Still save it but mark it
+            dup_count += 1
+            dup_count_file.write_text(str(dup_count))
+
+            if dup_count >= DUPLICATE_WARNING_THRESHOLD:
+                log_main(f"  WARNING: Snapshot unchanged for {dup_count} consecutive cycles")
+                log_camera(cam_name, f"WARNING: Snapshot unchanged for multiple consecutive cycles")
+            else:
+                log_main(f"  INFO: Snapshot unchanged since last capture (normal if no motion)")
+
             source = source + "_DUPLICATE"
+
         elif last_image_hash:
-            log_main(f"  \u2705 Image is unique (compared with previous photo)")
+            dup_count_file.write_text("0")
+            log_main(f"  OK: Image is unique (compared with previous photo)")
+
         else:
-            log_main(f"  \u2139 No previous photos to compare (first run or new camera)")
+            dup_count_file.write_text("0")
+            log_main(f"  INFO: No previous photos to compare (first run or new camera)")
+
 
        # Save photo
         save_start = time.time()
