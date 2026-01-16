@@ -1,4 +1,5 @@
 // camera-refresh.js - Smart camera auto-refresh without full page reload
+// FIXED: Proper image path comparison for date-organized folders
 
 // ============================================================================
 // DYNAMIC CAMERA REFRESH
@@ -124,17 +125,23 @@ async function updateCameraImages(camera) {
     const imageContainer = card.querySelector('.camera-image-container');
     if (!imageContainer) return;
 
-    // Get existing images
-    const existingImages = Array.from(card.querySelectorAll('.camera-image')).map(img => {
+    // Get existing image PATHS (not just filenames)
+    // camera.images from API contains paths like "2025-01-16/camera_20250116_120000.jpg"
+    const existingImagePaths = Array.from(card.querySelectorAll('.camera-image')).map(img => {
+        // Extract the path after /image/{camera-name}/
         const src = img.src;
-        return src.substring(src.lastIndexOf('/') + 1);
+        const parts = src.split(`/image/${camera.normalized_name}/`);
+        return parts.length > 1 ? parts[1] : '';
     });
 
-    // Check if we have new images
-    const hasNewImages = camera.images.some(img => !existingImages.includes(img));
+    console.log(`[${camera.name}] Existing images:`, existingImagePaths);
+    console.log(`[${camera.name}] New images:`, camera.images);
+
+    // Check if we have new images by comparing full paths
+    const hasNewImages = camera.images.some(img => !existingImagePaths.includes(img));
 
     if (hasNewImages) {
-        console.log(`New images detected for ${camera.name}`);
+        console.log(`✓ New images detected for ${camera.name}`);
 
         // Save current active index
         const currentIndex = cameras[camera.normalized_name]?.currentIndex || 0;
@@ -147,14 +154,14 @@ async function updateCameraImages(camera) {
         if (oldNav) oldNav.remove();
 
         // Add new images
-        camera.images.forEach((image, index) => {
+        camera.images.forEach((imagePath, index) => {
             const img = document.createElement('img');
-            img.src = `/image/${camera.normalized_name}/${image}`;
+            img.src = `/image/${camera.normalized_name}/${imagePath}`;
             img.alt = camera.name;
             img.className = `camera-image ${index === 0 ? 'active' : ''}`;
             img.dataset.camera = camera.normalized_name;
             img.dataset.index = index;
-            img.dataset.filename = image;
+            img.dataset.filename = imagePath;  // Store full path
 
             imageContainer.appendChild(img);
         });
@@ -164,8 +171,8 @@ async function updateCameraImages(camera) {
             const nav = document.createElement('div');
             nav.className = 'image-nav';
 
-            camera.images.forEach((image, index) => {
-                const dot = document.createElement('div');
+            camera.images.forEach((imagePath, index) => {
+                const dot = document.createElement('dot');
                 dot.className = `nav-dot ${index === 0 ? 'active' : ''}`;
                 dot.dataset.camera = camera.normalized_name;
                 dot.dataset.index = index;
@@ -189,6 +196,10 @@ async function updateCameraImages(camera) {
         if (camera.images.length > 0) {
             updateImageTimestamp(camera.normalized_name, camera.images[0]);
         }
+
+        console.log(`✓ Images refreshed for ${camera.name}`);
+    } else {
+        console.log(`- No new images for ${camera.name}`);
     }
 }
 
@@ -204,11 +215,15 @@ function startCameraAutoRefresh() {
 
     // Initial refresh after 30 seconds (give page time to fully load)
     setTimeout(() => {
+        console.log('Running initial camera refresh...');
         refreshCameras();
     }, 30000);
 
     // Then refresh at poll interval
-    setInterval(refreshCameras, pollIntervalMs);
+    setInterval(() => {
+        console.log('Running scheduled camera refresh...');
+        refreshCameras();
+    }, pollIntervalMs);
 }
 
 // ============================================================================
@@ -216,6 +231,7 @@ function startCameraAutoRefresh() {
 // ============================================================================
 
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing camera auto-refresh...');
     startCameraAutoRefresh();
 });
 
