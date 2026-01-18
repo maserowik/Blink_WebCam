@@ -495,17 +495,38 @@ async def process_single_camera(blink, cam_name, cam):
             "temperature": str(cam.temperature) if hasattr(cam, 'temperature') else "N/A",
             "battery": str(cam.battery) if hasattr(cam, 'battery') else "N/A",
             "wifi_strength": cam.wifi_strength if hasattr(cam, 'wifi_strength') else None,
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().isoformat(),
+            "last_photo": photo_path.name if photo_path and photo_path.exists() else None
         }
         
         status_file = cam_folder / "status.json"
+        
+        # Write to temp file first, then rename (atomic operation)
+        temp_status_file = cam_folder / "status.json.tmp"
+        
         try:
-            with open(status_file, 'w') as f:
+            # Ensure camera folder exists
+            cam_folder.mkdir(parents=True, exist_ok=True)
+            
+            # Write to temp file
+            with open(temp_status_file, 'w') as f:
                 json.dump(status_data, f, indent=2)
+            
+            # Atomic rename
+            temp_status_file.replace(status_file)
+            
             log_main(f"  \u2713 Status saved: {status_file.name}")
+            
         except Exception as e:
             log_main(f"  \u26A0 Error writing status file: {e}")
             log_camera(cam_name, f"ERROR: Failed to write status.json - {e}")
+            
+            # Try to clean up temp file
+            if temp_status_file.exists():
+                try:
+                    temp_status_file.unlink()
+                except:
+                    pass
 
     except Exception as e:
         log_main(f"  \u274C Save error: {e}")
