@@ -647,8 +647,16 @@ def api_snooze_cleanup():
 # ============================================================================
 # CAMERA REFRESH API (for auto-refresh without full page reload)
 # ============================================================================
+# Add this to Blink_Web_Server.py
+# Replace the existing /api/cameras/refresh route with this enhanced version
+
 @app.route('/api/cameras/refresh')
 def api_cameras_refresh():
+    """
+    Enhanced camera refresh API with better caching and timestamp handling
+    """
+    start_time = time.time()
+    
     try:
         with open(CONFIG_FILE, "r") as f:
             config = json.load(f)
@@ -657,11 +665,15 @@ def api_cameras_refresh():
         carousel_images = config.get("carousel_images", 5)
 
         cameras = []
+        
         for cam_name in cameras_list:
             normalized_name = normalize_camera_name(cam_name)
             cam_folder = CAMERAS_DIR / normalized_name
 
-            images = get_camera_images(cam_folder, max_images=carousel_images)
+            # Get images with explicit cache busting
+            images = get_camera_images_fresh(cam_folder, max_images=carousel_images)
+            
+            # Detect issues
             alerts = detect_camera_issues(cam_folder, cam_name, images)
 
             # Read camera status from status.json file
@@ -671,12 +683,19 @@ def api_cameras_refresh():
             wifi_strength = status["wifi_strength"]
             wifi = wifi_bars(wifi_strength)
 
-            # Get last update time from newest image
+            # Get last update time from NEWEST image (not oldest)
             last_update = None
+            last_update_formatted = None
+            
             if images:
+                # Images are sorted newest first, so take the first one
                 newest_image_path = cam_folder / images[0]
                 if newest_image_path.exists():
-                    last_update = datetime.fromtimestamp(newest_image_path.stat().st_mtime)
+                    try:
+                        last_update = datetime.fromtimestamp(newest_image_path.stat().st_mtime)
+                        last_update_formatted = last_update.strftime("%m/%d/%Y %I:%M:%S %p")
+                    except Exception as e:
+                        log_web_error(f"Error getting timestamp for {newest_image_path}", e)
 
             cameras.append({
                 "name": cam_name,
@@ -686,19 +705,74 @@ def api_cameras_refresh():
                 "battery": battery,
                 "wifi": wifi,
                 "last_update": last_update.isoformat() if last_update else None,
-                "last_update_formatted": last_update.strftime("%m/%d/%Y %I:%M:%S %p") if last_update else None,
+                "last_update_formatted": last_update_formatted,
                 "alerts": alerts
             })
 
+        duration = time.time() - start_time
+        log_web_performance(f"api_cameras_refresh | {duration:.2f}s | {len(cameras)} cameras")
+
         return jsonify({
             "success": True,
-            "cameras": cameras
+            "cameras": cameras,
+            "refresh_time": datetime.now().isoformat()
         })
 
     except Exception as e:
         log_web_error("Error refreshing cameras", e)
-        return jsonify({"success": False, "error": str(e)}), 500
+        return jsonify({
+            "success": False, 
+            "error": str(e)
+        }), 500
 
+
+def get_camera_images_fresh(camera_folder: Path, max_images: int = 5) -> list:
+    """
+    Get most recent images from camera folder with explicit freshness check
+    
+    This is a cache-busting version that ensures we always get the latest files
+    """
+    images = []
+
+    if not camera_folder.exists():
+        return images
+
+    # Get all date folders (YYYY-MM-DD), sorted newest first
+    try:
+        date_folders = sorted(
+            [f for f in camera_folder.iterdir() 
+             if f.is_dir() and f.name.count('-') == 2 and len(f.name) == 10],
+            reverse=True
+        )
+    except Exception as e:
+        log_web_error(f"Error listing date folders in {camera_folder}", e)
+        return images
+
+    # Collect images from newest folders first
+    for date_folder in date_folders:
+        try:
+            # Force filesystem to refresh directory listing
+            folder_images = sorted(
+                [f for f in date_folder.glob("*.jpg") if f.is_file()],
+                key=lambda x: x.stat().st_mtime,
+                reverse=True
+            )
+
+            for img in folder_images:
+                # Verify file still exists and is readable
+                if img.exists() and img.is_file():
+                    # Store relative path: YYYY-MM-DD/filename.jpg
+                    relative_path = f"{date_folder.name}/{img.name}"
+                    images.append(relative_path)
+
+                    if len(images) >= max_images:
+                        return images
+                        
+        except Exception as e:
+            log_web_error(f"Error reading images from {date_folder}", e)
+            continue
+
+    return images
 
 # ============================================================================
 # NWS API ROUTES
