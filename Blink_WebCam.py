@@ -1,6 +1,6 @@
 """
-Blink_WebCam.py - Main Entry Point (Modular Version)
-Simplified main file that uses separate modules for camera processing
+Blink_WebCam.py - Main Entry Point (Sequential Processing)
+REVERTED: Back to one-at-a-time camera processing for reliability
 """
 
 import asyncio
@@ -140,9 +140,9 @@ camera_processor = CameraProcessor(
 )
 
 
-# ---------------- Main Snapshot Function ---------------- #
+# ---------------- Main Snapshot Function (SEQUENTIAL) ---------------- #
 async def take_snapshot(blink):
-    """Take snapshots from all configured cameras (PARALLEL PROCESSING)"""
+    """Take snapshots from all configured cameras (SEQUENTIAL PROCESSING)"""
     cycle_start = time.time()
 
     try:
@@ -161,42 +161,37 @@ async def take_snapshot(blink):
         log_performance(f"global_refresh | ERROR: {e}")
 
     log_main("=" * 60)
-    log_main("STARTING PARALLEL CAMERA PROCESSING")
+    log_main("STARTING SEQUENTIAL CAMERA PROCESSING")
     log_main("=" * 60)
 
-    # Create processing tasks
-    tasks = []
-    camera_names = []
-    
+    successful = 0
+    failed = 0
+
+    # Process cameras ONE AT A TIME
     for cam_name, cam in blink.cameras.items():
         if cam_name not in CAMERAS:
             log_main(f"Skipping {cam_name} (not in config)")
             continue
         
-        camera_names.append(cam_name)
-        tasks.append(camera_processor.process_camera(blink, cam_name, cam, CAMERAS_DIR))
-    
-    log_main(f"Processing {len(tasks)} cameras concurrently...")
-
-    # Run all tasks in parallel
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-
-    # Analyze results
-    successful = sum(1 for r in results if isinstance(r, dict) and r.get("success"))
-    failed = len(results) - successful
-    
-    for i, result in enumerate(results):
-        if isinstance(result, Exception):
-            cam_name = camera_names[i]
-            log_main(f"ERROR: Error processing {cam_name}: {result}")
-            log_camera(cam_name, f"CRITICAL ERROR: {type(result).__name__}: {result}")
+        try:
+            result = await camera_processor.process_camera(blink, cam_name, cam, CAMERAS_DIR)
+            
+            if result.get("success"):
+                successful += 1
+            else:
+                failed += 1
+                
+        except Exception as e:
+            log_main(f"ERROR: Critical error processing {cam_name}: {e}")
+            log_camera(cam_name, f"CRITICAL ERROR: {type(e).__name__}: {e}")
+            failed += 1
 
     cycle_duration = time.time() - cycle_start
     log_main("=" * 60)
     log_main(f"Snapshot cycle complete: {successful} processed, {failed} failed")
-    log_main(f"Total cycle time: {cycle_duration:.2f}s (PARALLEL)")
+    log_main(f"Total cycle time: {cycle_duration:.2f}s (SEQUENTIAL)")
     log_main("=" * 60)
-    log_performance(f"snapshot_cycle_parallel | {cycle_duration:.2f}s | Success:{successful} Failed:{failed}")
+    log_performance(f"snapshot_cycle_sequential | {cycle_duration:.2f}s | Success:{successful} Failed:{failed}")
 
 
 # ---------------- Main Blink Polling ---------------- #
@@ -329,13 +324,13 @@ if __name__ == "__main__":
     LOG_FOLDER.mkdir(parents=True, exist_ok=True)
 
     log_main("=" * 70)
-    log_main("BLINK WEBCAM SCRIPT STARTED (MODULAR VERSION - PARALLEL PROCESSING)")
+    log_main("BLINK WEBCAM SCRIPT STARTED (SEQUENTIAL PROCESSING)")
     log_main("=" * 70)
     log_main(f"Log rotation enabled: keeps 5 days of history")
     log_main(f"Photo retention: keeps {MAX_DAYS} days of photos per camera")
     log_main(f"Poll interval: {POLL_INTERVAL // 60} minutes")
     log_main(f"Configured cameras: {len(CAMERAS)}")
-    log_main(f"Processing mode: PARALLEL (all cameras at once)")
+    log_main(f"Processing mode: SEQUENTIAL (one camera at a time)")
     log_main("=" * 70)
 
     asyncio.run(poll_blink())
