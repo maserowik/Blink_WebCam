@@ -1,4 +1,5 @@
 // camera.js - Camera carousel and image management
+// COMPLETE REPLACEMENT FOR static/js/camera.js
 
 // ============================================================================
 // CAMERA CAROUSEL MANAGEMENT
@@ -6,16 +7,52 @@
 
 const cameras = {};
 
-// Initialize camera data structures
-document.querySelectorAll('.camera-image').forEach(img => {
-    const cam = img.dataset.camera;
-    if (!cameras[cam]) {
-        cameras[cam] = {
-            currentIndex: 0,
-            images: document.querySelectorAll(`.camera-image[data-camera="${cam}"]`),
-            dots: document.querySelectorAll(`.nav-dot[data-camera="${cam}"]`)
-        };
-    }
+// Initialize camera data structures - MORE ROBUST VERSION
+function initializeCameras() {
+    console.log('Initializing camera carousels...');
+    
+    // Clear existing cameras object
+    Object.keys(cameras).forEach(key => delete cameras[key]);
+    
+    // Find all camera cards
+    document.querySelectorAll('.camera-card').forEach(card => {
+        const cameraName = card.dataset.camera;
+        if (!cameraName) {
+            console.warn('Camera card found without data-camera attribute');
+            return;
+        }
+        
+        const images = card.querySelectorAll(`.camera-image[data-camera="${cameraName}"]`);
+        const dots = card.querySelectorAll(`.nav-dot[data-camera="${cameraName}"]`);
+        
+        if (images.length > 0) {
+            cameras[cameraName] = {
+                currentIndex: 0,
+                images: images,
+                dots: dots
+            };
+            console.log(`✓ Initialized carousel for ${cameraName}: ${images.length} images`);
+        } else {
+            console.warn(`No images found for camera: ${cameraName}`);
+        }
+    });
+    
+    console.log(`Total cameras initialized: ${Object.keys(cameras).length}`);
+}
+
+// Call initialization on load
+document.addEventListener('DOMContentLoaded', function() {
+    initializeCameras();
+    
+    // Initialize timestamps for all cameras
+    Object.keys(cameras).forEach(cameraName => {
+        const cam = cameras[cameraName];
+        if (cam.images.length > 0) {
+            const firstImage = cam.images[0];
+            const filename = firstImage.dataset.filename || firstImage.src.split('/').pop().split('?')[0];
+            updateImageTimestamp(cameraName, filename);
+        }
+    });
 });
 
 // ============================================================================
@@ -24,19 +61,29 @@ document.querySelectorAll('.camera-image').forEach(img => {
 
 function switchImage(cameraName, index) {
     const cam = cameras[cameraName];
-    if (!cam) return;
+    if (!cam) {
+        console.error(`Camera not found: ${cameraName}`);
+        return;
+    }
 
+    // Remove active class from all images and dots
     cam.images.forEach(img => img.classList.remove('active'));
     cam.dots.forEach(dot => dot.classList.remove('active'));
 
-    cam.images[index].classList.add('active');
-    if (cam.dots[index]) cam.dots[index].classList.add('active');
+    // Add active class to selected image and dot
+    if (cam.images[index]) {
+        cam.images[index].classList.add('active');
+    }
+    if (cam.dots[index]) {
+        cam.dots[index].classList.add('active');
+    }
 
     cam.currentIndex = index;
 
+    // Update timestamp
     const activeImage = cam.images[index];
     if (activeImage) {
-        const filename = activeImage.dataset.filename || activeImage.src.split('/').pop();
+        const filename = activeImage.dataset.filename || activeImage.src.split('/').pop().split('?')[0];
         updateImageTimestamp(cameraName, filename);
     }
 }
@@ -48,7 +95,7 @@ function switchImage(cameraName, index) {
 setInterval(() => {
     Object.keys(cameras).forEach(cameraName => {
         const cam = cameras[cameraName];
-        if (cam.images.length > 1) {
+        if (cam && cam.images.length > 1) {
             const nextIndex = (cam.currentIndex + 1) % cam.images.length;
             switchImage(cameraName, nextIndex);
         }
@@ -56,15 +103,18 @@ setInterval(() => {
 }, 3000);
 
 // ============================================================================
-// NAV DOT CLICK HANDLERS
+// NAV DOT CLICK HANDLERS - DELEGATE TO CONTAINER
 // ============================================================================
 
-document.querySelectorAll('.nav-dot').forEach(dot => {
-    dot.addEventListener('click', e => {
-        const cam = e.target.dataset.camera;
-        const idx = parseInt(e.target.dataset.index);
-        switchImage(cam, idx);
-    });
+document.addEventListener('click', function(e) {
+    if (e.target.classList.contains('nav-dot')) {
+        const cameraName = e.target.dataset.camera;
+        const index = parseInt(e.target.dataset.index);
+        
+        if (cameraName && !isNaN(index)) {
+            switchImage(cameraName, index);
+        }
+    }
 });
 
 // ============================================================================
@@ -75,10 +125,16 @@ function updateImageTimestamp(cameraName, filename) {
     const el = document.getElementById(`timestamp-${cameraName}`);
     if (!el) return;
 
-    const match = filename.match(/_(\d{8})_(\d{6})/);
+    // Extract from path if it contains date folder (e.g., "2025-01-23/camera_20250123_120000.jpg")
+    let filenameOnly = filename;
+    if (filename.includes('/')) {
+        filenameOnly = filename.split('/').pop();
+    }
+
+    const match = filenameOnly.match(/_(\d{8})_(\d{6})/);
     if (match) {
-        const dateStr = match[1];
-        const timeStr = match[2];
+        const dateStr = match[1]; // YYYYMMDD
+        const timeStr = match[2]; // HHMMSS
 
         const year = dateStr.substring(0, 4);
         const month = dateStr.substring(4, 6);
@@ -102,22 +158,7 @@ function updateImageTimestamp(cameraName, filename) {
 }
 
 // ============================================================================
-// INITIALIZE TIMESTAMPS
-// ============================================================================
-
-document.addEventListener('DOMContentLoaded', function() {
-    Object.keys(cameras).forEach(cameraName => {
-        const cam = cameras[cameraName];
-        if (cam.images.length > 0) {
-            const firstImage = cam.images[0];
-            const filename = firstImage.dataset.filename || firstImage.src.split('/').pop();
-            updateImageTimestamp(cameraName, filename);
-        }
-    });
-});
-
-// ============================================================================
-// STALE IMAGE DETECTION (FIXED - checks newest image, not active one)
+// STALE IMAGE DETECTION
 // ============================================================================
 
 function checkForStaleImages() {
@@ -127,16 +168,22 @@ function checkForStaleImages() {
     document.querySelectorAll('.camera-card').forEach(card => {
         const cameraName = card.dataset.camera;
         
-        // Get ALL images for this camera, not just the active one
+        // Get ALL images for this camera
         const allImages = card.querySelectorAll('.camera-image');
         if (allImages.length === 0) return;
         
-        // Find the NEWEST image (they're sorted newest first in HTML)
+        // Find the NEWEST image (first one, they're sorted newest first)
         const newestImage = allImages[0];
-        const filename = newestImage.dataset.filename || newestImage.src.split('/').pop();
+        const filename = newestImage.dataset.filename || newestImage.src.split('/').pop().split('?')[0];
+        
+        // Extract from path if needed
+        let filenameOnly = filename;
+        if (filename.includes('/')) {
+            filenameOnly = filename.split('/').pop();
+        }
         
         // Extract timestamp from filename
-        const match = filename.match(/_(\d{8})_(\d{6})/);
+        const match = filenameOnly.match(/_(\d{8})_(\d{6})/);
         if (!match) return;
         
         const dateStr = match[1];
@@ -172,7 +219,7 @@ function checkForStaleImages() {
                 card.querySelector('.camera-image-container').appendChild(badge);
             }
             
-            // Update the badge time every check
+            // Update the badge time
             const existingBadge = card.querySelector('.stale-badge');
             if (existingBadge) {
                 existingBadge.innerHTML = `
@@ -190,29 +237,10 @@ function checkForStaleImages() {
     });
 }
 
-function parseImageTimestamp(timestampText) {
-    // Parse "MM/DD/YYYY HH:MM:SS AM/PM" format
-    try {
-        const match = timestampText.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2}):(\d{2})\s+(AM|PM)/);
-        if (!match) return null;
-        
-        const [, month, day, year, hours, minutes, seconds, ampm] = match;
-        let hour = parseInt(hours);
-        
-        if (ampm === 'PM' && hour !== 12) hour += 12;
-        if (ampm === 'AM' && hour === 12) hour = 0;
-        
-        return new Date(year, month - 1, day, hour, minutes, seconds);
-    } catch (e) {
-        console.error('Error parsing timestamp:', e);
-        return null;
-    }
-}
-
 function formatTimeAgo(minutes) {
     if (minutes < 60) {
         return `${Math.floor(minutes)}m ago`;
-    } else if (minutes < 1440) { // Less than 24 hours
+    } else if (minutes < 1440) {
         const hours = Math.floor(minutes / 60);
         return `${hours}h ago`;
     } else {
@@ -227,7 +255,6 @@ function formatTimeAgo(minutes) {
 
 // Check on page load
 document.addEventListener('DOMContentLoaded', function() {
-    // Wait a bit for timestamps to be initialized
     setTimeout(() => {
         checkForStaleImages();
     }, 1000);
@@ -235,3 +262,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Check every minute
 setInterval(checkForStaleImages, 60000);
+
+// ============================================================================
+// EXPOSE FOR USE BY OTHER MODULES
+// ============================================================================
+
+window.cameras = cameras;
+window.initializeCameras = initializeCameras;
+window.switchImage = switchImage;
+window.updateImageTimestamp = updateImageTimestamp;
+window.checkForStaleImages = checkForStaleImages;

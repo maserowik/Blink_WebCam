@@ -1,4 +1,4 @@
-from flask import Flask, render_template, send_file, jsonify, request
+from flask import Flask, render_template, send_file, jsonify, request, make_response
 from pathlib import Path
 import json
 import socket
@@ -48,6 +48,24 @@ WEATHER_CACHE_DURATION = 30 * 60  # 30 minutes in seconds
 
 # NWS Alert Monitor (global)
 nws_monitor = None
+
+
+# ============================================================================
+# CACHE-CONTROL HEADERS
+# ============================================================================
+
+def add_no_cache_headers(response):
+    """Add cache-busting headers to all responses"""
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '-1'
+    return response
+
+
+@app.after_request
+def apply_caching(response):
+    """Apply no-cache headers to all responses"""
+    return add_no_cache_headers(response)
 
 
 # ============================================================================
@@ -158,16 +176,52 @@ def get_camera_images(camera_folder: Path, max_images: int = 5) -> list:
     return images
 
 
+def get_camera_images_fresh(camera_folder: Path, max_images: int = 5) -> list:
+    """
+    Get most recent images with explicit freshness check (cache-busting)
+    """
+    images = []
+
+    if not camera_folder.exists():
+        return images
+
+    try:
+        date_folders = sorted(
+            [f for f in camera_folder.iterdir() 
+             if f.is_dir() and f.name.count('-') == 2 and len(f.name) == 10],
+            reverse=True
+        )
+    except Exception as e:
+        log_web_error(f"Error listing date folders in {camera_folder}", e)
+        return images
+
+    for date_folder in date_folders:
+        try:
+            folder_images = sorted(
+                [f for f in date_folder.glob("*.jpg") if f.is_file()],
+                key=lambda x: x.stat().st_mtime,
+                reverse=True
+            )
+
+            for img in folder_images:
+                if img.exists() and img.is_file():
+                    relative_path = f"{date_folder.name}/{img.name}"
+                    images.append(relative_path)
+
+                    if len(images) >= max_images:
+                        return images
+                        
+        except Exception as e:
+            log_web_error(f"Error reading images from {date_folder}", e)
+            continue
+
+    return images
+
+
 def read_camera_status(camera_folder: Path) -> dict:
-    """
-    Read camera status from status.json file
-    
-    Returns:
-        Dictionary with temperature, battery, wifi_strength
-    """
+    """Read camera status from status.json file"""
     status_file = camera_folder / "status.json"
     
-    # Default values
     default_status = {
         "temperature": "N/A",
         "battery": "N/A",
@@ -175,42 +229,25 @@ def read_camera_status(camera_folder: Path) -> dict:
     }
     
     if not status_file.exists():
-        log_web(f"Status file not found: {status_file}")
         return default_status
     
     try:
         with open(status_file, 'r') as f:
             status_data = json.load(f)
         
-        # Extract values with defaults
-        temperature = status_data.get("temperature", "N/A")
-        battery = status_data.get("battery", "N/A")
-        wifi_strength = status_data.get("wifi_strength", None)
-        
-        log_web(f"Read status from {status_file.name}: temp={temperature}, battery={battery}, wifi={wifi_strength}")
-        
         return {
-            "temperature": temperature,
-            "battery": battery,
-            "wifi_strength": wifi_strength
+            "temperature": status_data.get("temperature", "N/A"),
+            "battery": status_data.get("battery", "N/A"),
+            "wifi_strength": status_data.get("wifi_strength", None)
         }
         
-    except json.JSONDecodeError as e:
-        log_web_error(f"JSON decode error reading {status_file}", e)
-        return default_status
     except Exception as e:
         log_web_error(f"Error reading status file {status_file}", e)
         return default_status
 
 
 def detect_camera_issues(camera_folder: Path, camera_name: str, images: list) -> dict:
-    """
-    Detect camera issues:
-    - Offline (no images)
-    - Duplicate images (marked with _DUPLICATE in filename)
-
-    Returns dict with alert info
-    """
+    """Detect camera issues"""
     alerts = {
         "is_offline": False,
         "offline_reason": "",
@@ -223,18 +260,25 @@ def detect_camera_issues(camera_folder: Path, camera_name: str, images: list) ->
         alerts["offline_reason"] = "No images available"
         return alerts
 
-    # Check if any recent images have "_DUPLICATE" in their path
-    # This is marked by the webcam script when it detects duplicate images
-    duplicate_count = 0
-    for img_path in images[:3]:  # Check first 3 images
-        if "_DUPLICATE" in img_path:
-            duplicate_count += 1
+    duplicate_count = sum(1 for img_path in images[:3] if "_DUPLICATE" in img_path)
     
     if duplicate_count >= 2:
         alerts["has_duplicates"] = True
         alerts["duplicate_count"] = duplicate_count
 
     return alerts
+
+
+def map_weather_code(code):
+    """Map Tomorrow.io weather codes to descriptive text"""
+    weather_codes = {
+        0: "Unknown", 1000: "Clear", 1001: "Cloudy", 1100: "Mostly Clear",
+        1101: "Partly Cloudy", 1102: "Mostly Cloudy", 2000: "Fog",
+        2100: "Light Fog", 4000: "Drizzle", 4001: "Rain", 4200: "Light Rain",
+        4201: "Heavy Rain", 5000: "Snow", 5001: "Flurries", 5100: "Light Snow",
+        5101: "Heavy Snow", 8000: "Thunderstorm"
+    }
+    return weather_codes.get(code, "Unknown")
 
 
 # ============================================================================
@@ -353,36 +397,36 @@ def index():
             alerts = detect_camera_issues(cam_folder, cam_name, images)
             snooze_status = snooze_manager.get_snooze_status(normalized_name)
             
-            # Read status from status.json file
             status = read_camera_status(cam_folder)
-            temperature = status["temperature"]
-            battery = status["battery"]
-            wifi_strength = status["wifi_strength"]
-            wifi = wifi_bars(wifi_strength)
 
             cameras.append({
                 "name": cam_name,
                 "normalized_name": normalized_name,
                 "images": images,
-                "temperature": temperature,
-                "battery": battery,
-                "wifi": wifi,
+                "temperature": status["temperature"],
+                "battery": status["battery"],
+                "wifi": wifi_bars(status["wifi_strength"]),
                 "snooze_status": snooze_status,
                 "alerts": alerts
             })
 
-        # Check if all cameras are snoozed
         all_snoozed = snooze_manager.are_all_cameras_snoozed(
             [cam["normalized_name"] for cam in cameras]
         )
 
         log_web(f"Index page loaded with {len(cameras)} cameras")
 
-        return render_template('index.html',
+        response = make_response(render_template('index.html',
                                cameras=cameras,
                                config=config,
                                location=location,
-                               all_snoozed=all_snoozed)
+                               all_snoozed=all_snoozed))
+        
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        return response
 
     except Exception as e:
         log_web_error("Error loading index page", e)
@@ -396,7 +440,20 @@ def serve_image(camera_name, image_path):
         image_file = cam_folder / image_path
 
         if image_file.exists():
-            return send_file(image_file, mimetype='image/jpeg')
+            mtime = image_file.stat().st_mtime
+            
+            response = send_file(
+                image_file, 
+                mimetype='image/jpeg',
+                max_age=0,
+                etag=str(mtime)
+            )
+            
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            
+            return response
         else:
             log_web_error(f"Image not found: {image_file}")
             return "Image not found", 404
@@ -405,38 +462,6 @@ def serve_image(camera_name, image_path):
         log_web_error(f"Error serving image: {camera_name}/{image_path}", e)
         return str(e), 500
 
-def map_weather_code(code):
-    """Map Tomorrow.io weather codes to descriptive text"""
-    weather_codes = {
-        0: "Unknown",
-        1000: "Clear",
-        1001: "Cloudy",
-        1100: "Mostly Clear",
-        1101: "Partly Cloudy",
-        1102: "Mostly Cloudy",
-        2000: "Fog",
-        2100: "Light Fog",
-        3000: "Light Wind",
-        3001: "Wind",
-        3002: "Strong Wind",
-        4000: "Drizzle",
-        4001: "Rain",
-        4200: "Light Rain",
-        4201: "Heavy Rain",
-        5000: "Snow",
-        5001: "Flurries",
-        5100: "Light Snow",
-        5101: "Heavy Snow",
-        6000: "Freezing Drizzle",
-        6001: "Freezing Rain",
-        6200: "Light Freezing Rain",
-        6201: "Heavy Freezing Rain",
-        7000: "Ice Pellets",
-        7101: "Heavy Ice Pellets",
-        7102: "Light Ice Pellets",
-        8000: "Thunderstorm"
-    }
-    return weather_codes.get(code, "Unknown")
 
 @app.route('/api/weather')
 def api_weather():
@@ -451,7 +476,6 @@ def api_weather():
         if not weather_config.get("enabled") or not weather_config.get("api_key"):
             return jsonify({"error": "Weather not configured"}), 400
 
-        # Check cache
         with weather_cache['lock']:
             if weather_cache['data'] and weather_cache['timestamp']:
                 age = time.time() - weather_cache['timestamp']
@@ -459,21 +483,17 @@ def api_weather():
                     log_web_performance(f"weather_cache_hit | {time.time() - start_time:.2f}s")
                     return jsonify(weather_cache['data'])
 
-        # Fetch new data
         api_key = weather_config["api_key"]
         lat = location.get("lat", 40.3267)
         lon = location.get("lon", -80.0171)
 
         url = f"https://api.tomorrow.io/v4/weather/realtime?location={lat},{lon}&apikey={api_key}"
-
         response = requests.get(url, timeout=10)
         response.raise_for_status()
 
         data = response.json()
-
-       # Transform to expected format
         weather_code = data["data"]["values"].get("weatherCode", 0)
-        weather_desc = map_weather_code(weather_code) 
+        weather_desc = map_weather_code(weather_code)
 
         weather_data = {
             "current_condition": [{
@@ -484,7 +504,6 @@ def api_weather():
             }]
         }
 
-        # Update cache
         with weather_cache['lock']:
             weather_cache['data'] = weather_data
             weather_cache['timestamp'] = time.time()
@@ -509,10 +528,7 @@ def api_radar_config():
         radar_config["lat"] = location.get("lat", 40.3267)
         radar_config["lon"] = location.get("lon", -80.0171)
 
-        return jsonify({
-            "success": True,
-            "radar_config": radar_config
-        })
+        return jsonify({"success": True, "radar_config": radar_config})
 
     except Exception as e:
         log_web_error("Error loading radar config", e)
@@ -532,10 +548,6 @@ def api_arm_set():
     result = asyncio.run(set_blink_arm_state(arm))
     return jsonify(result)
 
-
-# ============================================================================
-# SNOOZE API ROUTES
-# ============================================================================
 
 @app.route('/api/snooze/status/<camera_name>')
 def api_snooze_status(camera_name):
@@ -587,10 +599,7 @@ def api_snooze_all_status():
 
         all_snoozed = snooze_manager.are_all_cameras_snoozed(camera_names)
 
-        return jsonify({
-            "success": True,
-            "all_snoozed": all_snoozed
-        })
+        return jsonify({"success": True, "all_snoozed": all_snoozed})
 
     except Exception as e:
         log_web_error("Error checking snooze all status", e)
@@ -614,10 +623,7 @@ def api_snooze_all_set():
 
         snooze_manager.snooze_all_cameras(camera_names, duration_minutes)
 
-        return jsonify({
-            "success": True,
-            "count": len(camera_names)
-        })
+        return jsonify({"success": True, "count": len(camera_names)})
 
     except Exception as e:
         log_web_error("Error snoozing all cameras", e)
@@ -644,17 +650,9 @@ def api_snooze_cleanup():
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-# ============================================================================
-# CAMERA REFRESH API (for auto-refresh without full page reload)
-# ============================================================================
-# Add this to Blink_Web_Server.py
-# Replace the existing /api/cameras/refresh route with this enhanced version
-
 @app.route('/api/cameras/refresh')
 def api_cameras_refresh():
-    """
-    Enhanced camera refresh API with better caching and timestamp handling
-    """
+    """Enhanced camera refresh API with cache busting"""
     start_time = time.time()
     
     try:
@@ -670,25 +668,14 @@ def api_cameras_refresh():
             normalized_name = normalize_camera_name(cam_name)
             cam_folder = CAMERAS_DIR / normalized_name
 
-            # Get images with explicit cache busting
             images = get_camera_images_fresh(cam_folder, max_images=carousel_images)
-            
-            # Detect issues
             alerts = detect_camera_issues(cam_folder, cam_name, images)
-
-            # Read camera status from status.json file
             status = read_camera_status(cam_folder)
-            temperature = status["temperature"]
-            battery = status["battery"]
-            wifi_strength = status["wifi_strength"]
-            wifi = wifi_bars(wifi_strength)
 
-            # Get last update time from NEWEST image (not oldest)
             last_update = None
             last_update_formatted = None
             
             if images:
-                # Images are sorted newest first, so take the first one
                 newest_image_path = cam_folder / images[0]
                 if newest_image_path.exists():
                     try:
@@ -701,9 +688,9 @@ def api_cameras_refresh():
                 "name": cam_name,
                 "normalized_name": normalized_name,
                 "images": images,
-                "temperature": temperature,
-                "battery": battery,
-                "wifi": wifi,
+                "temperature": status["temperature"],
+                "battery": status["battery"],
+                "wifi": wifi_bars(status["wifi_strength"]),
                 "last_update": last_update.isoformat() if last_update else None,
                 "last_update_formatted": last_update_formatted,
                 "alerts": alerts
@@ -712,71 +699,23 @@ def api_cameras_refresh():
         duration = time.time() - start_time
         log_web_performance(f"api_cameras_refresh | {duration:.2f}s | {len(cameras)} cameras")
 
-        return jsonify({
+        response = jsonify({
             "success": True,
             "cameras": cameras,
-            "refresh_time": datetime.now().isoformat()
+            "refresh_time": datetime.now().isoformat(),
+            "cache_buster": int(time.time() * 1000)
         })
+        
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        
+        return response
 
     except Exception as e:
         log_web_error("Error refreshing cameras", e)
-        return jsonify({
-            "success": False, 
-            "error": str(e)
-        }), 500
+        return jsonify({"success": False, "error": str(e)}), 500
 
-
-def get_camera_images_fresh(camera_folder: Path, max_images: int = 5) -> list:
-    """
-    Get most recent images from camera folder with explicit freshness check
-    
-    This is a cache-busting version that ensures we always get the latest files
-    """
-    images = []
-
-    if not camera_folder.exists():
-        return images
-
-    # Get all date folders (YYYY-MM-DD), sorted newest first
-    try:
-        date_folders = sorted(
-            [f for f in camera_folder.iterdir() 
-             if f.is_dir() and f.name.count('-') == 2 and len(f.name) == 10],
-            reverse=True
-        )
-    except Exception as e:
-        log_web_error(f"Error listing date folders in {camera_folder}", e)
-        return images
-
-    # Collect images from newest folders first
-    for date_folder in date_folders:
-        try:
-            # Force filesystem to refresh directory listing
-            folder_images = sorted(
-                [f for f in date_folder.glob("*.jpg") if f.is_file()],
-                key=lambda x: x.stat().st_mtime,
-                reverse=True
-            )
-
-            for img in folder_images:
-                # Verify file still exists and is readable
-                if img.exists() and img.is_file():
-                    # Store relative path: YYYY-MM-DD/filename.jpg
-                    relative_path = f"{date_folder.name}/{img.name}"
-                    images.append(relative_path)
-
-                    if len(images) >= max_images:
-                        return images
-                        
-        except Exception as e:
-            log_web_error(f"Error reading images from {date_folder}", e)
-            continue
-
-    return images
-
-# ============================================================================
-# NWS API ROUTES
-# ============================================================================
 
 @app.route('/api/nws/config')
 def api_nws_config():
@@ -820,12 +759,10 @@ if __name__ == '__main__':
     NWS_LOG_FOLDER.mkdir(parents=True, exist_ok=True)
 
     log_rotator.start_midnight_rotation_thread()
-
-    # Start NWS monitoring
     start_nws_monitoring()
 
     log_web("=" * 60)
-    log_web("BLINK WEB SERVER STARTING")
+    log_web("BLINK WEB SERVER STARTING (WITH CACHE-BUSTING)")
     log_web("=" * 60)
     log_web(f"Web server log: {get_current_log_file(WEBSERVER_LOG_FOLDER, 'webserver')}")
     log_web(f"Performance log: {get_current_log_file(PERF_LOG_FOLDER, 'webserver-perf')}")
@@ -833,5 +770,4 @@ if __name__ == '__main__':
     log_web("=" * 60)
 
     from waitress import serve
-
     serve(app, host='0.0.0.0', port=5000, threads=6)
