@@ -85,7 +85,7 @@
         <div class="weather-widget" id="weather-widget">
             <div class="weather-loading">Loading weather...</div>
         </div>
-        <!-- NWS Alert Widget (NEW) -->
+        <!-- NWS/NHC Alert Widget -->
         <div class="nws-alert-widget" id="nws-alert-widget" style="display: none;">
             <!-- Populated by JavaScript -->
         </div>
@@ -135,7 +135,7 @@
             </div>
             {% endif %}
 
-            {# NEW: Offline Badge #}
+            {# Offline Badge #}
             {% if camera.alerts.is_offline %}
             <div class="camera-offline-badge">
                 <div style="font-size: 1.2em;">&#x1F534; OFFLINE</div>
@@ -145,7 +145,7 @@
             </div>
             {% endif %}
 
-            {# NEW: Duplicate Image Badge #}
+            {# Duplicate Image Badge #}
             {% if camera.alerts.has_duplicates and not camera.alerts.is_offline %}
             <div class="camera-duplicate-badge">
                &#x26A0;&#xFE0F; DUPLICATE IMAGES
@@ -220,7 +220,7 @@
 </footer>
 </div>
 
-<!-- Load Configuration (must be first) -->
+<!-- CRITICAL: Load Configuration FIRST before any other scripts -->
 <script>
 // Configuration from Flask template
 window.BlinkConfig = {
@@ -234,14 +234,15 @@ window.BlinkConfig = {
     WEATHER_LAT: "{{ location.lat | default(40.3267) }}",
     WEATHER_LON: "{{ location.lon | default(-80.0171) }}"
 };
+console.log('BlinkConfig loaded:', window.BlinkConfig);
 </script>
 
-<!-- Load JavaScript modules -->
-<script src="{{ url_for('static', filename='js/snooze.js') }}"></script>
-<script src="{{ url_for('static', filename='js/radar.js') }}"></script>
-<script src="{{ url_for('static', filename='js/nws-alerts.js') }}"></script>
-<script src="{{ url_for('static', filename='js/camera.js') }}"></script>
+<!-- Load JavaScript modules IN ORDER -->
 <script src="{{ url_for('static', filename='js/weather.js') }}"></script>
+<script src="{{ url_for('static', filename='js/radar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/weather-alerts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/camera.js') }}"></script>
+<script src="{{ url_for('static', filename='js/snooze.js') }}"></script>
 <script src="{{ url_for('static', filename='js/camera-refresh.js') }}"></script>
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
 

@@ -16,6 +16,7 @@ import time
 from alert_snooze import AlertSnooze, SNOOZE_DURATIONS
 from log_rotation import LogRotator
 from nws_alerts import NWSAlerts, validate_nws_zone
+from nhc_alerts import NHCAlerts  # NEW
 
 app = Flask(__name__)
 
@@ -36,6 +37,7 @@ log_rotator = LogRotator(LOG_FOLDER, max_backups=5)
 WEBSERVER_LOG_FOLDER = log_rotator.get_system_log_folder("webserver")
 PERF_LOG_FOLDER = log_rotator.get_system_log_folder("performance")
 NWS_LOG_FOLDER = log_rotator.get_system_log_folder("nws-alerts")
+NHC_LOG_FOLDER = log_rotator.get_system_log_folder("nhc-alerts")  # NEW
 
 # Weather caching
 weather_cache = {
@@ -46,8 +48,9 @@ weather_cache = {
 
 WEATHER_CACHE_DURATION = 30 * 60  # 30 minutes in seconds
 
-# NWS Alert Monitor (global)
+# Weather Alert Monitors (global)
 nws_monitor = None
+nhc_monitor = None  # NEW
 
 
 # ============================================================================
@@ -108,6 +111,15 @@ def log_nws(msg: str):
     """Log NWS alert events to system/nws-alerts/nws-alerts_YYYY-MM-DD.log"""
     log_rotator.check_and_rotate_if_needed()
     log_file = get_current_log_file(NWS_LOG_FOLDER, "nws-alerts")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(log_file, "a", encoding="utf-8") as f:
+        f.write(f"{timestamp} | {msg}\n")
+
+
+def log_nhc(msg: str):
+    """Log NHC hurricane events to system/nhc-alerts/nhc-alerts_YYYY-MM-DD.log"""
+    log_rotator.check_and_rotate_if_needed()
+    log_file = get_current_log_file(NHC_LOG_FOLDER, "nhc-alerts")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(f"{timestamp} | {msg}\n")
@@ -372,6 +384,30 @@ def start_nws_monitoring():
 
     except Exception as e:
         log_web_error("Failed to start NWS monitoring", e)
+
+
+# ============================================================================
+# NHC ALERT INITIALIZATION (NEW)
+# ============================================================================
+
+def start_nhc_monitoring():
+    """Start NHC hurricane monitoring"""
+    global nhc_monitor
+    try:
+        with open(CONFIG_FILE, "r") as f:
+            config = json.load(f)
+
+        nhc_config = config.get("nhc_alerts", {})
+        if not nhc_config.get("enabled"):
+            log_web("NHC alerts disabled")
+            return
+
+        nhc_monitor = NHCAlerts(log_function=log_nhc)
+        nhc_monitor.start_polling_thread()
+        log_web("NHC hurricane monitoring started")
+
+    except Exception as e:
+        log_web_error("Failed to start NHC monitoring", e)
 
 
 # ============================================================================
@@ -749,6 +785,40 @@ def api_nws_alerts():
 
 
 # ============================================================================
+# NHC API ENDPOINTS (NEW)
+# ============================================================================
+
+@app.route('/api/nhc/config')
+def api_nhc_config():
+    with open(CONFIG_FILE, "r") as f:
+        config = json.load(f)
+
+    nhc_config = config.get("nhc_alerts", {})
+    has_hurricanes = nhc_monitor.get_alert_data().get("alert_active", False) if nhc_monitor else False
+
+    return jsonify({
+        "success": True,
+        "enabled": nhc_config.get("enabled", False),
+        "has_hurricanes": has_hurricanes
+    })
+
+
+@app.route('/api/nhc/alerts')
+def api_nhc_alerts():
+    if not nhc_monitor:
+        return jsonify({
+            "success": True,
+            "hurricanes": [],
+            "alert_active": False
+        })
+
+    return jsonify({
+        "success": True,
+        **nhc_monitor.get_alert_data()
+    })
+
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
@@ -757,9 +827,11 @@ if __name__ == '__main__':
     WEBSERVER_LOG_FOLDER.mkdir(parents=True, exist_ok=True)
     PERF_LOG_FOLDER.mkdir(parents=True, exist_ok=True)
     NWS_LOG_FOLDER.mkdir(parents=True, exist_ok=True)
+    NHC_LOG_FOLDER.mkdir(parents=True, exist_ok=True)  # NEW
 
     log_rotator.start_midnight_rotation_thread()
     start_nws_monitoring()
+    start_nhc_monitoring()  # NEW
 
     log_web("=" * 60)
     log_web("BLINK WEB SERVER STARTING (WITH CACHE-BUSTING)")
@@ -767,6 +839,7 @@ if __name__ == '__main__':
     log_web(f"Web server log: {get_current_log_file(WEBSERVER_LOG_FOLDER, 'webserver')}")
     log_web(f"Performance log: {get_current_log_file(PERF_LOG_FOLDER, 'webserver-perf')}")
     log_web(f"NWS alerts log: {get_current_log_file(NWS_LOG_FOLDER, 'nws-alerts')}")
+    log_web(f"NHC alerts log: {get_current_log_file(NHC_LOG_FOLDER, 'nhc-alerts')}")  # NEW
     log_web("=" * 60)
 
     from waitress import serve

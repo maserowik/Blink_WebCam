@@ -98,6 +98,11 @@ async def setup_config():
                 if nws.get('zone'):
                     print(f"  Zone: {nws.get('zone')}")
 
+                # NHC Alerts configuration
+                nhc = config.get("nhc_alerts", {})
+                print("\n\u25B6 NHC HURRICANE ALERTS CONFIGURATION:")
+                print(f"  Enabled: {nhc.get('enabled', False)}")
+
                 print("=" * 60)
             except Exception as e:
                 print(f"\u26A0 Could not read configuration: {e}")
@@ -373,7 +378,7 @@ async def setup_config():
 
             print("\n\u2705 Radar configured successfully!")
 
-            # --- NWS Alert Configuration (NEW) ---
+            # --- NWS Alert Configuration ---
             print("\n\u25B6 NWS Weather Alert Configuration")
             print("-" * 60)
             existing_nws = existing_config.get("nws_alerts", {})
@@ -431,6 +436,33 @@ async def setup_config():
             else:
                 print("\n\u25B6 NWS alerts disabled")
 
+            # --- NHC Hurricane Alert Configuration (NEW) ---
+            print("\n\u25B6 NHC Hurricane Alert Configuration")
+            print("-" * 60)
+            existing_nhc = existing_config.get("nhc_alerts", {})
+
+            print("National Hurricane Center alerts for Atlantic basin hurricanes")
+            print("Automatically monitors at 5 AM, 11 AM, 5 PM, 11 PM")
+            print("Only Atlantic basin hurricanes are monitored")
+
+            nhc_enabled = get_input_with_default(
+                "\nEnable NHC hurricane alerts? [Y/n]",
+                existing_nhc.get("enabled", True),
+                bool
+            )
+
+            nhc_config = {
+                "enabled": nhc_enabled
+            }
+
+            if nhc_enabled:
+                print(f"\n\u2705 NHC hurricane monitoring enabled")
+                print("Alerts will appear alongside NWS alerts")
+                print("Monitoring: Atlantic basin hurricanes only")
+                print("Schedule: 5 AM, 11 AM, 5 PM, 11 PM")
+            else:
+                print("\n\u25B6 NHC alerts disabled")
+
             # --- Save Config ---
             config = {
                 "cameras": selected_cameras,
@@ -446,7 +478,8 @@ async def setup_config():
                 },
                 "weather": weather_config,
                 "radar": radar_config,
-                "nws_alerts": nws_config
+                "nws_alerts": nws_config,
+                "nhc_alerts": nhc_config  # NEW
             }
 
             with open(CONFIG_FILE, "w") as f:
@@ -471,6 +504,10 @@ async def setup_config():
             if nws_config['enabled']:
                 print(f"    Zone: {nws_config['zone']}")
                 print(f"    Polling: 5-min normal, 2-min active")
+            print(f"  NHC Alerts: {'Enabled' if nhc_config['enabled'] else 'Disabled'}")
+            if nhc_config['enabled']:
+                print(f"    Monitoring: Atlantic basin hurricanes")
+                print(f"    Schedule: 5 AM, 11 AM, 5 PM, 11 PM")
             print("=" * 60)
 
         except Exception as e:
