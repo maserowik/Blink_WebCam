@@ -1,5 +1,5 @@
 """
-camera_processor.py - Camera Processing Module
+camera_processor.py - Camera Processing Module (CLEANED - NO REPETITIVE LOGGING)
 Handles individual camera snapshot processing with retry logic and error handling
 """
 
@@ -31,17 +31,7 @@ class CameraProcessor:
         cam_folder = cameras_dir / normalized_name
         cam_folder.mkdir(parents=True, exist_ok=True)
         return cam_folder
-    
-    async def refresh_camera_state(self, cam, cam_name: str):
-        """Force refresh camera state before snapshot"""
-        try:
-            self.log_main("  Refreshing camera state before snapshot...")
-            await asyncio.wait_for(cam.async_update(), timeout=10)
-        except asyncio.TimeoutError:
-            self.log_main("  WARNING: Camera state refresh timed out")
-        except Exception as e:
-            self.log_main(f"  WARNING: Camera state refresh failed: {e}")
-    
+      
     async def request_snapshot_with_retry(self, cam, cam_name: str, max_retries=2):
         """Request snapshot with retry logic"""
         snap_start = time.time()
@@ -53,7 +43,6 @@ class CameraProcessor:
                     self.log_main(f"  Retry {attempt}/{max_retries} for snapshot...")
                     await asyncio.sleep(5)
                 
-                self.log_main("  Requesting new snapshot from camera...")
                 snap_result = await asyncio.wait_for(
                     cam.snap_picture(),
                     timeout=30
@@ -75,20 +64,18 @@ class CameraProcessor:
             except asyncio.TimeoutError:
                 snap_duration = time.time() - snap_start
                 self.log_camera_performance(cam_name, "snap_picture", snap_duration, False)
-                self.log_main(f"  WARNING: Snapshot request timed out (attempt {attempt + 1}/{max_retries})")
-                self.log_camera(cam_name, f"TIMEOUT: Snapshot request exceeded 30 seconds (attempt {attempt + 1})")
                 
                 if attempt == max_retries - 1:
                     self.log_main(f"  ERROR: All snapshot attempts failed for {cam_name}")
+                    self.log_camera(cam_name, f"TIMEOUT: Snapshot request exceeded 30 seconds after {max_retries} attempts")
             
             except Exception as e:
                 snap_duration = time.time() - snap_start
                 self.log_camera_performance(cam_name, "snap_picture", snap_duration, False)
-                self.log_main(f"  WARNING: Snapshot request failed: {type(e).__name__}: {e}")
-                self.log_camera(cam_name, f"ERROR: Snapshot request failed - {type(e).__name__}: {e}")
                 
                 if attempt == max_retries - 1:
                     self.log_main(f"  ERROR: All snapshot attempts failed for {cam_name}")
+                    self.log_camera(cam_name, f"ERROR: Snapshot request failed - {type(e).__name__}: {e}")
 
         return snap_success
     
@@ -111,17 +98,14 @@ class CameraProcessor:
             else:
                 media_duration = time.time() - media_start
                 self.log_camera_performance(cam_name, "get_media", media_duration, False)
-                self.log_main(f"  ERROR: HTTP {response.status}")
                 self.log_camera(cam_name, f"ERROR: HTTP {response.status} from get_media")
         except asyncio.TimeoutError:
             media_duration = time.time() - media_start
             self.log_camera_performance(cam_name, "get_media", media_duration, False)
-            self.log_main(f"  Timeout: Media download timed out for {cam_name}")
             self.log_camera(cam_name, f"TIMEOUT: Media download exceeded 30 seconds")
         except Exception as e:
             media_duration = time.time() - media_start
             self.log_camera_performance(cam_name, "get_media", media_duration, False)
-            self.log_main(f"  ERROR: Download failed: {e}")
             self.log_camera(cam_name, f"ERROR: Media download failed - {type(e).__name__}: {e}")
 
         # Fallback to thumbnail
@@ -139,12 +123,10 @@ class CameraProcessor:
             except asyncio.TimeoutError:
                 thumb_duration = time.time() - thumb_start
                 self.log_camera_performance(cam_name, "get_thumbnail", thumb_duration, False)
-                self.log_main(f"  Timeout: Thumbnail download timed out for {cam_name}")
                 self.log_camera(cam_name, f"TIMEOUT: Thumbnail download exceeded 15 seconds")
             except Exception as e:
                 thumb_duration = time.time() - thumb_start
                 self.log_camera_performance(cam_name, "get_thumbnail", thumb_duration, False)
-                self.log_main(f"  ERROR: Thumbnail failed: {e}")
                 self.log_camera(cam_name, f"ERROR: Thumbnail download failed - {type(e).__name__}: {e}")
         
         # Final fallback - placeholder
@@ -231,9 +213,7 @@ class CameraProcessor:
         self.log_main(f"  Temperature: {getattr(cam, 'temperature', 'N/A')}")
         self.log_main(f"  WiFi Signal: {getattr(cam, 'wifi_strength', 'N/A')} dBm ({bars}/5 bars)")
 
-        # Refresh camera state
-        await self.refresh_camera_state(cam, cam_name)
-        
+               
         # Request snapshot with retry
         snap_success = await self.request_snapshot_with_retry(cam, cam_name)
         
@@ -296,7 +276,7 @@ class CameraProcessor:
         # Save status
         self.save_camera_status(cam, cam_folder, cam_name, photo_path)
         
-        # Log summary
+        # Log summary - SINGLE LINE ONLY
         log_entry = f"Temp: {cam.temperature} | Battery: {cam.battery} | WiFi: {bars}/5 | Source: {source}"
         self.log_camera(cam_name, log_entry)
 
@@ -310,7 +290,7 @@ class CameraProcessor:
         }
     
     def save_camera_status(self, cam, cam_folder: Path, cam_name: str, photo_path: Path):
-        """Save camera status to JSON file"""
+        """Save camera status to JSON file - NO LOGGING"""
         import json
         
         status_data = {
@@ -329,9 +309,9 @@ class CameraProcessor:
             with open(temp_status_file, 'w') as f:
                 json.dump(status_data, f, indent=2)
             temp_status_file.replace(status_file)
-            self.log_main(f"  Status updated: {status_file.name}")
+            # NO LOGGING - status update is routine operation
         except Exception as e:
-            self.log_main(f"  WARNING: Error updating status file: {e}")
+            # Only log errors
             self.log_camera(cam_name, f"ERROR: Failed to update status.json - {e}")
             
             if temp_status_file.exists():

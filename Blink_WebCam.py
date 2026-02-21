@@ -1,6 +1,6 @@
 """
-Blink_WebCam.py - Main Entry Point (Sequential Processing)
-REVERTED: Back to one-at-a-time camera processing for reliability
+Blink_WebCam.py - Main Entry Point (CLEANED - NO REPETITIVE LOGGING)
+Sequential processing with streamlined logging
 """
 
 import asyncio
@@ -92,6 +92,7 @@ def log_token(msg: str):
 
 
 def log_performance(msg: str):
+    """Performance log - ONLY system-wide performance metrics"""
     log_rotator.check_and_rotate_if_needed()
     log_file = get_current_log_file(PERF_LOG_FOLDER, "performance")
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -100,23 +101,22 @@ def log_performance(msg: str):
 
 
 def log_camera_performance(cam_name: str, operation: str, duration: float, success: bool = True):
-    normalized_name = normalize_camera_name(cam_name)
-    camera_log_folder = log_rotator.get_camera_log_folder(normalized_name)
-    date_str = datetime.now().strftime("%Y-%m-%d")
-    log_file = camera_log_folder / f"{normalized_name}_{date_str}.log"
-
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    """
+    STREAMLINED: Log only to system performance log
+    NO duplicate camera-specific performance logs
+    """
     status = "SUCCESS" if success else "FAILED"
-    with open(log_file, "a", encoding="utf-8") as f:
-        f.write(f"{timestamp} | PERF | {operation} | {duration:.2f}s | {status}\n")
-
+    
+    # Only log to system performance log
     log_performance(f"{cam_name} | {operation} | {duration:.2f}s | {status}")
-
+    
+    # Warn about slow operations
     if duration > 30:
         log_main(f"WARNING SLOW OPERATION: {cam_name} - {operation} took {duration:.2f}s")
 
 
 def log_camera(cam_name: str, msg: str):
+    """Camera-specific log - ERRORS AND IMPORTANT EVENTS ONLY"""
     log_rotator.check_and_rotate_if_needed()
     normalized_name = normalize_camera_name(cam_name)
     camera_log_folder = log_rotator.get_camera_log_folder(normalized_name)
@@ -324,7 +324,7 @@ if __name__ == "__main__":
     LOG_FOLDER.mkdir(parents=True, exist_ok=True)
 
     log_main("=" * 70)
-    log_main("BLINK WEBCAM SCRIPT STARTED (SEQUENTIAL PROCESSING)")
+    log_main("BLINK WEBCAM SCRIPT STARTED (SEQUENTIAL - STREAMLINED LOGGING)")
     log_main("=" * 70)
     log_main(f"Log rotation enabled: keeps 5 days of history")
     log_main(f"Photo retention: keeps {MAX_DAYS} days of photos per camera")

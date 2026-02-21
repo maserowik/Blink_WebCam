@@ -85,9 +85,13 @@
         <div class="weather-widget" id="weather-widget">
             <div class="weather-loading">Loading weather...</div>
         </div>
-        <!-- NWS/NHC Alert Widget -->
+        <!-- NWS Alert Widget -->
         <div class="nws-alert-widget" id="nws-alert-widget" style="display: none;">
-            <!-- Populated by JavaScript -->
+            <!-- Populated by nws-alerts.js -->
+        </div>
+        <!-- NHC Hurricane Alert Widget -->
+        <div class="nws-alert-widget" id="nhc-alert-widget" style="display: none;">
+            <!-- Populated by nhc-alerts.js -->
         </div>
         <div class="arm-toggle" id="arm-toggle" onclick="toggleArm()">
             <div class="arm-toggle-slider">
@@ -240,7 +244,8 @@ console.log('BlinkConfig loaded:', window.BlinkConfig);
 <!-- Load JavaScript modules IN ORDER -->
 <script src="{{ url_for('static', filename='js/weather.js') }}"></script>
 <script src="{{ url_for('static', filename='js/radar.js') }}"></script>
-<script src="{{ url_for('static', filename='js/weather-alerts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/nws-alerts.js') }}"></script>
+<script src="{{ url_for('static', filename='js/nhc-alerts.js') }}"></script>
 <script src="{{ url_for('static', filename='js/camera.js') }}"></script>
 <script src="{{ url_for('static', filename='js/snooze.js') }}"></script>
 <script src="{{ url_for('static', filename='js/camera-refresh.js') }}"></script>
