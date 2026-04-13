@@ -66,7 +66,6 @@ class CameraProcessor:
                 self.log_camera_performance(cam_name, "snap_picture", snap_duration, False)
                 
                 if attempt == max_retries - 1:
-                    self.log_main(f"  ERROR: All snapshot attempts failed for {cam_name}")
                     self.log_camera(cam_name, f"TIMEOUT: Snapshot request exceeded 30 seconds after {max_retries} attempts")
             
             except Exception as e:
@@ -74,7 +73,6 @@ class CameraProcessor:
                 self.log_camera_performance(cam_name, "snap_picture", snap_duration, False)
                 
                 if attempt == max_retries - 1:
-                    self.log_main(f"  ERROR: All snapshot attempts failed for {cam_name}")
                     self.log_camera(cam_name, f"ERROR: Snapshot request failed - {type(e).__name__}: {e}")
 
         return snap_success
@@ -208,11 +206,6 @@ class CameraProcessor:
 
         cam_folder = self.ensure_camera_folder(cam_name, cameras_dir)
         bars = self.wifi_bars(cam.wifi_strength)
-
-        self.log_main(f"  Battery: {getattr(cam, 'battery', 'N/A')}")
-        self.log_main(f"  Temperature: {getattr(cam, 'temperature', 'N/A')}")
-        self.log_main(f"  WiFi Signal: {getattr(cam, 'wifi_strength', 'N/A')} dBm ({bars}/5 bars)")
-
                
         # Request snapshot with retry
         snap_success = await self.request_snapshot_with_retry(cam, cam_name)

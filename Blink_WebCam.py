@@ -145,20 +145,20 @@ async def take_snapshot(blink):
     """Take snapshots from all configured cameras (SEQUENTIAL PROCESSING)"""
     cycle_start = time.time()
 
-    try:
-        log_main("Refreshing all cameras...")
-        refresh_start = time.time()
-        await asyncio.wait_for(blink.refresh(force=True), timeout=30)
-        refresh_duration = time.time() - refresh_start
-        log_performance(f"global_refresh | {refresh_duration:.2f}s | SUCCESS")
-        log_main(f"Refresh complete in {refresh_duration:.2f}s")
-    except asyncio.TimeoutError:
-        refresh_duration = time.time() - refresh_start
-        log_performance(f"global_refresh | {refresh_duration:.2f}s | TIMEOUT")
-        log_main("WARNING: Camera refresh timed out after 30s")
-    except Exception as e:
-        log_main(f"Error refreshing blink: {e}")
-        log_performance(f"global_refresh | ERROR: {e}")
+##    try:
+##        log_main("Refreshing all cameras...")
+##        refresh_start = time.time()
+##        await asyncio.wait_for(blink.refresh(force=True), timeout=30)
+##        refresh_duration = time.time() - refresh_start
+##        log_performance(f"global_refresh | {refresh_duration:.2f}s | SUCCESS")
+##        log_main(f"Refresh complete in {refresh_duration:.2f}s")
+##    except asyncio.TimeoutError:
+##        refresh_duration = time.time() - refresh_start
+##        log_performance(f"global_refresh | {refresh_duration:.2f}s | TIMEOUT")
+##        log_main("WARNING: Camera refresh timed out after 30s")
+##    except Exception as e:
+##        log_main(f"Error refreshing blink: {e}")
+##        log_performance(f"global_refresh | ERROR: {e}")
 
     log_main("=" * 60)
     log_main("STARTING SEQUENTIAL CAMERA PROCESSING")
