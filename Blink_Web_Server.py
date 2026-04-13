@@ -35,7 +35,7 @@ log_rotator = LogRotator(LOG_FOLDER, max_backups=5)
 
 # Define log file paths
 WEBSERVER_LOG_FOLDER = log_rotator.get_system_log_folder("webserver")
-PERF_LOG_FOLDER = log_rotator.get_system_log_folder("performance")
+PERF_LOG_FOLDER = log_rotator.get_system_log_folder("webserver-perf")
 NWS_LOG_FOLDER = log_rotator.get_system_log_folder("nws-alerts")
 NHC_LOG_FOLDER = log_rotator.get_system_log_folder("nhc-alerts")  # NEW
 
