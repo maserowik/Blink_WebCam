@@ -9,7 +9,7 @@ User=beta-blink
 WorkingDirectory=/home/beta-blink/Blink_WebCam
 Environment=HOME=/home/beta-blink
 Environment=XDG_RUNTIME_DIR=/run/user/1000
-ExecStart=/home/beta-blink/Blink_WebCam/.blink/bin/python /home/beta-blink/Blink_WebCam/Blink_WebCam.py
+ExecStart=/home/beta-blink/Blink_WebCam/.blink/bin/python /home/beta-blink/Blink_WebCam/Blink_Web_Cam.py
 Restart=on-failure
 RestartSec=10
 

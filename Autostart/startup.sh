@@ -75,10 +75,10 @@ fi
 
 # Start Camera Service
 echo "Checking for Blink Camera service..."
-pgrep -f Blink_WebCam.py >/dev/null
+pgrep -f Blink_Web_Cam.py >/dev/null
 if [ $? -eq 1 ]; then
   echo "Starting Blink Camera Service..."
-  python3 Blink_WebCam.py &
+  python3 Blink_Web_Cam.py &
 else
   echo "Blink Camera Service already running"
 fi
