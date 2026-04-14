@@ -1,5 +1,5 @@
 """
-Blink_WebCam.py - Main Entry Point (CLEANED - NO REPETITIVE LOGGING)
+Blink_Web_Cam.py - Main Entry Point (CLEANED - NO REPETITIVE LOGGING)
 Sequential processing with streamlined logging
 """
 
