@@ -20,12 +20,17 @@ async function refreshCameras() {
     console.log('Refreshing camera data...');
     console.log('Last refresh:', lastRefreshTime ? lastRefreshTime.toLocaleTimeString() : 'Never');
 
+    // Add cache-busting to API call
+    const cacheBuster = Date.now();
+
     try {
-        const response = await fetch('/api/cameras/refresh', {
+        const response = await fetch(`/api/cameras/refresh?cb=${cacheBuster}`, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
-                'Cache-Control': 'no-cache'
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Expires': '0'
             }
         });
 
@@ -40,7 +45,7 @@ async function refreshCameras() {
         }
 
         const cameras = data.cameras;
-        console.log(`Received data for ${cameras.length} camera(s)`);
+        console.log(`Received data for ${cameras.length} camera(s) at ${data.refresh_time}`);
 
         // Track update statistics
         let updatedCount = 0;
@@ -243,11 +248,7 @@ function updateAlertBadges(camera, card) {
 }
 
 // ============================================================================
-// UPDATE CAMERA IMAGES DYNAMICALLY - ENHANCED
-// ============================================================================
-// ============================================================================
-// UPDATE FOR camera-refresh.js
-// Replace the updateCameraImages function with this version
+// UPDATE CAMERA IMAGES DYNAMICALLY - SINGLE CORRECT VERSION
 // ============================================================================
 
 async function updateCameraImages(camera, card) {
@@ -279,13 +280,6 @@ async function updateCameraImages(camera, card) {
     }
 
     console.log(`  ✓ NEW IMAGES DETECTED for ${camera.name}`);
-
-    // Save current active index to restore after rebuild
-    const currentActiveImage = card.querySelector('.camera-image.active');
-    let currentFilename = null;
-    if (currentActiveImage) {
-        currentFilename = currentActiveImage.dataset.filename;
-    }
 
     // Remove old images and nav
     existingImages.forEach(img => img.remove());
@@ -329,18 +323,18 @@ async function updateCameraImages(camera, card) {
     }
 
     // Reinitialize camera data structure in carousel
-   	if (window.initializeCameras) {
-		window.initializeCameras();
-	} else {
-		// Fallback - reinitialize just this camera
-		if (window.cameras) {
-			window.cameras[camera.normalized_name] = {
-				currentIndex: 0,
-				images: document.querySelectorAll(`.camera-image[data-camera="${camera.normalized_name}"]`),
-				dots: document.querySelectorAll(`.nav-dot[data-camera="${camera.normalized_name}"]`)
-			};
-		}
-	}
+    if (window.initializeCameras) {
+        window.initializeCameras();
+    } else {
+        // Fallback - reinitialize just this camera
+        if (window.cameras) {
+            window.cameras[camera.normalized_name] = {
+                currentIndex: 0,
+                images: document.querySelectorAll(`.camera-image[data-camera="${camera.normalized_name}"]`),
+                dots: document.querySelectorAll(`.nav-dot[data-camera="${camera.normalized_name}"]`)
+            };
+        }
+    }
 
     // Update timestamp for first image
     if (camera.images.length > 0) {
@@ -349,116 +343,6 @@ async function updateCameraImages(camera, card) {
 
     console.log(`  ✓ Images refreshed for ${camera.name} with cache buster: ${cacheBuster}`);
     return true;
-}
-
-
-// ============================================================================
-// ALSO ADD THIS TO camera-refresh.js - Enhanced refresh with retry logic
-// ============================================================================
-
-async function refreshCameras() {
-    // Prevent concurrent refreshes
-    if (refreshInProgress) {
-        console.log('Refresh already in progress, skipping...');
-        return;
-    }
-
-    refreshInProgress = true;
-    console.log('='.repeat(60));
-    console.log('Refreshing camera data...');
-    console.log('Last refresh:', lastRefreshTime ? lastRefreshTime.toLocaleTimeString() : 'Never');
-
-    // Add cache-busting to API call
-    const cacheBuster = Date.now();
-
-    try {
-        const response = await fetch(`/api/cameras/refresh?cb=${cacheBuster}`, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                'Pragma': 'no-cache',
-                'Expires': '0'
-            }
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        if (!data.success) {
-            throw new Error(data.error || 'Failed to refresh cameras');
-        }
-
-        const cameras = data.cameras;
-        console.log(`Received data for ${cameras.length} camera(s) at ${data.refresh_time}`);
-
-        // Track update statistics
-        let updatedCount = 0;
-        let skippedCount = 0;
-
-        // Update each camera card dynamically
-        for (const camera of cameras) {
-            const card = document.querySelector(`.camera-card[data-camera="${camera.normalized_name}"]`);
-            if (!card) {
-                console.warn(`Card not found for camera: ${camera.normalized_name}`);
-                continue;
-            }
-
-            console.log(`Processing camera: ${camera.name}`);
-
-            // Update timestamp
-            const timestampEl = document.getElementById(`timestamp-${camera.normalized_name}`);
-            if (timestampEl && camera.last_update_formatted) {
-                const oldTimestamp = timestampEl.textContent;
-                timestampEl.textContent = camera.last_update_formatted;
-                if (oldTimestamp !== camera.last_update_formatted) {
-                    console.log(`  ✓ Timestamp updated: ${camera.last_update_formatted}`);
-                }
-            }
-
-            // Update temperature
-            updateTemperature(camera, card);
-
-            // Update battery
-            updateBattery(camera, card);
-
-            // Update WiFi bars
-            updateWiFi(camera, card);
-
-            // Update images if new images are available
-            const imagesUpdated = await updateCameraImages(camera, card);
-            if (imagesUpdated) {
-                updatedCount++;
-            } else {
-                skippedCount++;
-            }
-
-            // Update offline status
-            updateOfflineStatus(camera, card);
-
-            // Update alert badges
-            updateAlertBadges(camera, card);
-        }
-
-        // Refresh snooze badges
-        await refreshSnoozeBadges();
-
-        // Recheck stale images
-        checkForStaleImages();
-
-        lastRefreshTime = new Date();
-        console.log(`Camera refresh complete: ${updatedCount} updated, ${skippedCount} unchanged`);
-        console.log('='.repeat(60));
-
-    } catch (error) {
-        console.error('ERROR: Camera refresh failed:', error);
-        console.error('Stack trace:', error.stack);
-    } finally {
-        refreshInProgress = false;
-    }
 }
 
 // ============================================================================
