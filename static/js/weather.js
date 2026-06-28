@@ -163,11 +163,41 @@ document.addEventListener('DOMContentLoaded', function() {
     
     console.log('Weather config loaded:', window.BlinkConfig.WEATHER_LOCATION);
     
-    // Fetch weather once on page load
-    // Server caches for 30 minutes, so we don't need client-side polling
-    fetchWeather();
+    // Fetch weather with retry on failure (handles boot before network ready)
+    // Retries every 30 seconds up to 10 times, then polls every 30 minutes
+    let weatherRetryCount = 0;
+    const WEATHER_MAX_RETRIES = 10;
+    const WEATHER_RETRY_DELAY = 30000;   // 30 seconds
+    const WEATHER_POLL_INTERVAL = 1800000; // 30 minutes
 
-    console.log('Weather: Using server-side cache (30-minute refresh)');
+    async function fetchWeatherWithRetry() {
+        try {
+            const resp = await fetch('/api/weather', {
+                method: 'GET',
+                headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' }
+            });
+            if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
+            const data = await resp.json();
+            if (data.error) throw new Error(data.error);
+            displayWeather(data);
+            weatherRetryCount = 0;
+            console.log('Weather fetched successfully');
+        } catch (e) {
+            weatherRetryCount++;
+            console.warn(`Weather fetch failed (attempt ${weatherRetryCount}): ${e.message}`);
+            showWeatherError(e.message);
+            if (weatherRetryCount < WEATHER_MAX_RETRIES) {
+                console.log(`Retrying weather in 30 seconds...`);
+                setTimeout(fetchWeatherWithRetry, WEATHER_RETRY_DELAY);
+                return;
+            }
+            console.warn('Weather: max retries reached, will try again at next 30-min poll');
+        }
+    }
+
+    fetchWeatherWithRetry();
+    setInterval(fetchWeatherWithRetry, WEATHER_POLL_INTERVAL);
+    console.log('Weather: retry on failure enabled, 30-min polling active');
 });
 
 // Export for manual refresh if needed

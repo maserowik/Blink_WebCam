@@ -215,22 +215,25 @@ async def poll_blink():
         blink.auth.user_id = token_data.get("user_id")
         blink.urls = BlinkURLHandler(region_id)
 
-        try:
-            await blink.setup_post_verify()
+        while True:
+            try:
+                await blink.setup_post_verify()
 
-            log_main("=" * 50)
-            log_main("CAMERAS FOUND BY API:")
-            for cam_name in blink.cameras.keys():
-                log_main(f"  - '{cam_name}'")
-            log_main("=" * 50)
-            log_main(f"CAMERAS IN CONFIG: {CAMERAS}")
-            log_main("=" * 50)
+                log_main("=" * 50)
+                log_main("CAMERAS FOUND BY API:")
+                for cam_name in blink.cameras.keys():
+                    log_main(f"  - '{cam_name}'")
+                log_main("=" * 50)
+                log_main(f"CAMERAS IN CONFIG: {CAMERAS}")
+                log_main("=" * 50)
+                break
 
-        except Exception as e:
-            log_main(f"Error during Blink setup: {e}")
-            import traceback
-            log_main(traceback.format_exc())
-            return
+            except Exception as e:
+                log_main(f"Error during Blink setup: {e}")
+                import traceback
+                log_main(traceback.format_exc())
+                log_main("Network not ready -- retrying in 30 seconds...")
+                await asyncio.sleep(30)
 
         last_token_mtime = os.path.getmtime(TOKEN_FILE)
 
