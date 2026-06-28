@@ -321,6 +321,8 @@ Both should show `Active: active (running)`.
 
 **Note:** The systemd services do not launch Chrome. Use this option if you want the Python services to autostart and access the dashboard from another device on your network.
 
+**Note:** The `blink-webcam.service` file includes a network ping gate that holds startup until internet connectivity is confirmed before launching the camera service. This prevents startup failures after power outages where the thin client boots faster than the router. The service pings `8.8.8.8` every 5 seconds until it responds, then proceeds.
+
 ---
 
 ### Option B — startup.sh (recommended for kiosk/display use)
@@ -540,6 +542,25 @@ Then restart the camera service:
 pkill -f Blink_WebCam.py
 python3 Blink_WebCam.py &
 ```
+
+### Dashboard not recovering after power outage
+
+If the dashboard shows stale images or the weather shows "Service unavailable" after a power outage and does not recover on its own:
+
+- The thin client likely booted before the router finished coming up
+- The `blink-webcam.service` ping gate should hold startup until the network is ready -- verify it is in place:
+  ```bash
+  grep ExecStartPre /etc/systemd/system/blink-webcam.service
+  ```
+- If the line is missing, re-copy the service file from the repo:
+  ```bash
+  sudo cp Autostart/blink-webcam.service /etc/systemd/system/
+  sudo systemctl daemon-reload
+  ```
+- The weather widget will retry automatically every 30 seconds up to 10 times after a failed fetch -- if it still does not recover, restart the web server:
+  ```bash
+  sudo systemctl restart blink-webserver.service
+  ```
 
 ### Disk space filling up
 
